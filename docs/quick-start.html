@@ -3,59 +3,82 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>看板快速上手指南</title>
+  <title>基金风向运营驾驶舱 - 新手指南</title>
   <style>
-    :root{--bg:#f7fafc;--card:#fff;--line:#e2e8f0;--text:#1f2937;--muted:#64748b;--brand:#0f172a}
+    :root{--bg:#f6f8fb;--card:#fff;--line:#e2e8f0;--text:#111827;--muted:#64748b;--accent:#0f172a}
     body{margin:0;background:var(--bg);color:var(--text);font-family:"PingFang SC","Microsoft YaHei",sans-serif}
-    .wrap{max-width:1100px;margin:0 auto;padding:20px}
+    .wrap{max-width:1120px;margin:0 auto;padding:18px}
     .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
     h1,h2{margin:0 0 10px}
-    p,li{line-height:1.65}
+    p,li{line-height:1.7}
     .muted{color:var(--muted)}
     .links a{display:inline-block;margin:6px 8px 0 0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text);background:#fff}
     .links a:hover{border-color:#94a3b8}
     code{background:#f1f5f9;padding:1px 6px;border-radius:6px}
+    .key{background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 10px}
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>宝盈基金看板快速上手指南</h1>
-    <p class="muted">适用对象：首次接触本项目的运营/投放/内容同事。更新时间：2026-04-13</p>
+    <h1>基金风向运营驾驶舱 - 新手指南</h1>
+    <p class="muted">适用对象：运营/投放/内容同事（无需技术背景）｜更新时间：2026-04-13</p>
     <div class="links">
       <a href="./index.html">核心看板</a>
-      <a href="./ops-metrics.html">动态指标看板</a>
-      <a href="./competitor-weakness.html">竞品弱点看板</a>
+      <a href="./ops-metrics.html">动态指标</a>
+      <a href="./competitor-weakness.html">竞品弱点</a>
       <a href="./fund-detail-cockpit.html">基金详情驾驶舱</a>
       <a href="./metrics-doc.html">指标文档</a>
     </div>
   </div>
 
   <div class="card">
-    <h2>推荐使用顺序</h2>
+    <h2>先记住三句话</h2>
     <ol>
-      <li>先看“核心看板”：确认今日热点与榜单方向。</li>
-      <li>再看“动态指标”：判断短期热点还是趋势延续。</li>
-      <li>再看“竞品弱点”：筛选可突破的同业标的。</li>
-      <li>最后看“驾驶舱”：验证用户行为与内容互动。</li>
+      <li>先看口径，再看数据。</li>
+      <li>先看时间，再下结论。</li>
+      <li>热度不等于收益，必须联合判断。</li>
     </ol>
   </div>
 
   <div class="card">
-    <h2>更新时间说明</h2>
+    <h2>时间怎么看（最重要）</h2>
     <ul>
-      <li>工作日 <code>16:00</code> 自动更新并部署。</li>
-      <li>GitHub Pages 是静态站点，“手动更新按钮”不可用属于正常。</li>
-      <li>16:00 前看到“更新至前一日”是正常现象。</li>
+      <li><b>最新数据日期</b>：数据属于哪一天。</li>
+      <li><b>本次爬取时间</b>：系统抓取这批数据的时间。</li>
+      <li><b>源数据更新时间</b>：原网页接口返回批次（常见 11/14/15/16/21 点）。</li>
+    </ul>
+    <div class="key">汇报时建议固定说法：截至【日期】，源数据更新时间【时间】，在【范围/视角】下结论如下。</div>
+  </div>
+
+  <div class="card">
+    <h2>推荐使用顺序</h2>
+    <ol>
+      <li>核心看板：先看当日与滚动排序。</li>
+      <li>动态指标：判断是短期热点还是趋势延续。</li>
+      <li>竞品弱点：找可突破标的。</li>
+      <li>详情驾驶舱：验证用户行为与互动强度。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>各页重点</h2>
+    <ul>
+      <li>核心看板：加仓/减仓/双边/当日排序；当日排序口径固定“全部基金”。</li>
+      <li>动态指标：支持搜索基金名称/代码/公司；看净偏好、热度、分歧预警。</li>
+      <li>竞品弱点：按弱点分排序挑重点观察对象。</li>
+      <li>详情驾驶舱：支持搜索基金名称/代码/公司；看浏览-关注-持有与内容互动。</li>
+      <li>指标文档：口径词典与指标解释，汇报优先引用这里。</li>
     </ul>
   </div>
 
   <div class="card">
     <h2>常见问题</h2>
     <ul>
-      <li>页面不更新：先强刷浏览器（macOS：<code>Cmd + Shift + R</code>）。</li>
-      <li>指标文档提示“暂未生成”：仅该页缺失，其他看板不受影响。</li>
-      <li>部署失败：优先检查 Pages 设置与 Actions Secrets。</li>
+      <li>同一基金在不同页不一致：先核对“当前口径提示”（日期/范围/视角/检索词）。</li>
+      <li>搜不到“宝盈”：先确认日期与范围；当日样本池可能无该基金。</li>
+      <li>同一天数字变化：可能是源站批次更新，先对照“源数据更新时间”。</li>
+      <li>页面看起来没更新：先强刷浏览器（macOS：<code>Cmd + Shift + R</code>）。</li>
     </ul>
   </div>
 </div>
