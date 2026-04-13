@@ -173,4 +173,3 @@ jobs:
             sleep 5
           done
           echo "::warning::健康检查未返回 200，请稍后再访问。"
-        uses: actions/deploy-pages@v4
