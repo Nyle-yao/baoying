@@ -104,9 +104,14 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
     latest_date = ""
     if rows:
         latest_date = max((x["date"] for x in rows if x["date"]), default="")
+    update_times = pd.to_datetime(df.get("数据更新时间"), errors="coerce")
+    source_update_latest = ""
+    if update_times.notna().any():
+        source_update_latest = update_times.max().strftime("%Y-%m-%d %H:%M:%S")
     meta = {
         "latest_date": latest_date,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "crawl_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source_update_latest": source_update_latest,
     }
     return rows, meta
 
@@ -139,7 +144,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     th.sortable {{ cursor:pointer; user-select:none; }}
     .sort-mark {{ margin-left:4px; color:var(--muted); font-size:12px; }}
     .area {{ max-height:68vh; overflow:auto; }}
-    .meta-row {{ display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; margin-top:10px; }}
+    .meta-row {{ display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap:8px; margin-top:10px; }}
     .meta-box {{ background:var(--thead); border:1px solid var(--softborder); border-radius:8px; padding:8px; font-size:13px; }}
     .btn {{ border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }}
     .jump-links {{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 10px; }}
@@ -201,7 +206,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       <div class="tiny-note" id="scope_note"></div>
       <div class="meta-row">
         <div class="meta-box">最新数据日期：<span id="meta_latest"></span></div>
-        <div class="meta-box">看板生成时间：<span id="meta_gen"></span></div>
+        <div class="meta-box">本次爬取时间：<span id="meta_crawl"></span></div>
+        <div class="meta-box">源数据更新时间：<span id="meta_src_upd"></span></div>
         <button class="btn" id="btn_update">再次爬取检测更新</button>
       </div>
     </div>
@@ -270,7 +276,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     const fundTypes = uniq(DATA.map(r => r.fund_category)).filter(Boolean).sort();
     fundTypeSel.innerHTML = '<option value="">全部基金类型</option>' + fundTypes.map(t => `<option value="${{t}}">${{t}}</option>`).join("");
     document.getElementById("meta_latest").textContent = META.latest_date || "-";
-    document.getElementById("meta_gen").textContent = META.generated_at || "-";
+    document.getElementById("meta_crawl").textContent = META.crawl_at || "-";
+    document.getElementById("meta_src_upd").textContent = META.source_update_latest || "-";
 
     function todayStrLocal() {{
       const d = new Date();
