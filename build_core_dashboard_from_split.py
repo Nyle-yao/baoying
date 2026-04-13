@@ -365,8 +365,9 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       // Daily ranking tab: show only selected date ranking (not rolling windows).
       if (mode === "daily") {{
         const board = dailyBoardSel.value || "加仓";
+        const dailyScope = "全部基金";
         const rows = DATA
-          .filter(r => r.board === board && applyCommonFilter(r, exactDate, typeSel.value || "全部基金", "", ""))
+          .filter(r => r.board === board && applyCommonFilter(r, exactDate, dailyScope, "", ""))
           .map(r => ({{
             fund_name: r.fund_name,
             fund_code: r.fund_code,
@@ -451,7 +452,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       const rows = buildRows();
       const qtxt = (qInput.value || "").trim();
       scopeNote.textContent = mode === "daily"
-        ? `当前口径：当日排序；日期=${{dateSel.value || META.latest_date}}；榜单=${{dailyBoardSel.value || "加仓榜"}}`
+        ? `当前口径：当日排序；日期=${{dateSel.value || META.latest_date}}；榜单=${{dailyBoardSel.value || "加仓榜"}}；范围=全部基金`
         : `当前口径：滚动统计；日期=${{dateSel.value || META.latest_date}}；范围=${{typeSel.value || "全部基金"}}；基金类型=${{fundTypeSel.value || "全部"}}；检索=${{qtxt || "无"}}`;
       if (mode === "daily") {{
         thead.innerHTML = `<tr>
