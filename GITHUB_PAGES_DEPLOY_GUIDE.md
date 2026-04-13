@@ -11,14 +11,17 @@
 - `CD_PASSWORD`：你的密码
 - `CD_TARGET`：可选，默认 `https://www.cdollar.cn/leshu-pro/#/e/vq6aKqp5YU`
 - `CD_BROWSER_ID`：可选，默认 `09cb220223cb45410e11e84679b83fb6`
+- `GH_PAGES_ADMIN_TOKEN`：可选但强烈建议。用于自动启用 Pages（需 `pages:write` + `administration:write`，仓库限定到 `Nyle-yao/baoying`）。
 
 ## 3. 启用 Pages
 1. 仓库 `Settings -> Pages`
 2. `Build and deployment` 选择 `Source: GitHub Actions`
+3. 若未手动启用，工作流会尝试用 `GH_PAGES_ADMIN_TOKEN` 自动启用并切到 `build_type=workflow`
 
 ## 4. 触发部署
 - 手动：`Actions -> Update Dashboards And Deploy Pages -> Run workflow`
 - 自动：工作日 16:00（北京时间）自动运行
+- 自愈：若部署失败，`Pages Deploy Self-Heal` 会自动重试失败任务（最多 2 次重试）
 
 ## 5. 访问地址
 - 部署成功后，在 Actions 的 `Deploy to GitHub Pages` 步骤里可见 `page_url`。
