@@ -87,6 +87,14 @@ def main() -> int:
     for out_name, src_name in FILES.items():
         in_file = src / src_name
         if not in_file.exists():
+            if out_name == "metrics-doc.html":
+                # Metrics doc is optional in CI bootstrap; keep publish pipeline alive.
+                (docs / out_name).write_text(
+                    "<!doctype html><meta charset='utf-8'><title>指标文档</title><body style='font-family:PingFang SC,Microsoft YaHei,sans-serif;padding:24px;'>"
+                    "<h2>指标文档暂未生成</h2><p>本次自动更新未产出指标文档文件，核心/动态/竞品/驾驶舱看板不受影响。</p></body>",
+                    encoding="utf-8",
+                )
+                continue
             raise SystemExit(f"missing dashboard file: {in_file}")
         html = in_file.read_text(encoding="utf-8", errors="replace")
         static_mode = out_name == "index.html"
