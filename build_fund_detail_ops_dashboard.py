@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+
+def n(v: Any) -> float:
+    x = pd.to_numeric(v, errors="coerce")
+    if pd.isna(x):
+        return 0.0
+    return float(x)
+
+
+def t(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float) and pd.isna(v):
+        return ""
+    s = str(v).strip()
+    return "" if s.lower() == "nan" else s
+
+
+def norm_code(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s.zfill(6) if s.isdigit() else s
+
+
+def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    core = pd.read_excel(xlsx, sheet_name="详情核心指标")
+    notes = pd.read_excel(xlsx, sheet_name="动态和笔记")
+
+    core["基金代码"] = core["基金代码"].map(norm_code)
+    notes["基金代码"] = notes["基金代码"].map(norm_code)
+
+    notes["发布时间"] = pd.to_datetime(notes["发布时间"], errors="coerce")
+    notes["日"] = notes["发布时间"].dt.strftime("%Y-%m-%d")
+    notes["互动总量"] = notes["点赞数"].map(n) + notes["评论数"].map(n)
+
+    note_agg = (
+        notes.groupby("基金代码", dropna=False)
+        .agg(
+            笔记浏览总量=("浏览量", "sum"),
+            笔记点赞总量=("点赞数", "sum"),
+            笔记评论总量=("评论数", "sum"),
+            笔记互动总量=("互动总量", "sum"),
+            笔记条数_实抓=("帖子ID", "count"),
+            笔记平均互动率=("有效互动率(%)", "mean"),
+        )
+        .reset_index()
+    )
+    day_trend = (
+        notes.groupby("日", dropna=False)
+        .agg(发帖数=("帖子ID", "count"), 浏览量=("浏览量", "sum"), 互动量=("互动总量", "sum"))
+        .reset_index()
+        .sort_values("日")
+    )
+
+    merged = core.merge(note_agg, on="基金代码", how="left")
+    for c in ["笔记浏览总量", "笔记点赞总量", "笔记评论总量", "笔记互动总量", "笔记条数_实抓", "笔记平均互动率"]:
+        if c in merged.columns:
+            merged[c] = merged[c].fillna(0)
+
+    rows = []
+    for _, r in merged.iterrows():
+        rows.append(
+            {
+                "基金代码": norm_code(r.get("基金代码")),
+                "基金名称": t(r.get("基金名称")),
+                "投资方向标签": t(r.get("投资方向标签")) or "未分类",
+                "投资方向说明": t(r.get("投资方向说明")),
+                "榜单类型": t(r.get("榜单类型")),
+                "基金范围": t(r.get("基金范围")),
+                "本周浏览人数": n(r.get("本周浏览人数")),
+                "本月浏览人数": n(r.get("本月浏览人数")),
+                "自选人数": n(r.get("自选人数")),
+                "持有人数": n(r.get("持有人数")),
+                "搜曝比": n(r.get("搜曝比")),
+                "曝关比": n(r.get("曝关比")),
+                "曝转比": n(r.get("曝转比")),
+                "关转比": n(r.get("关转比")),
+                "净曝关比": n(r.get("净曝关比")),
+                "近7天提及文章数": n(r.get("近7天提及文章数")),
+                "动态笔记条数": n(r.get("动态笔记条数")),
+                "笔记浏览总量": n(r.get("笔记浏览总量")),
+                "笔记点赞总量": n(r.get("笔记点赞总量")),
+                "笔记评论总量": n(r.get("笔记评论总量")),
+                "笔记互动总量": n(r.get("笔记互动总量")),
+                "笔记平均互动率": n(r.get("笔记平均互动率")),
+                "基金分析观察周期": t(r.get("基金分析观察周期")),
+                "跟踪指数名称": t(r.get("跟踪指数名称")),
+                "跟踪指数收益率(%)": n(r.get("跟踪指数收益率(%)")),
+                "跟踪评价标题": t(r.get("跟踪评价标题")),
+                "跟踪评价说明": t(r.get("跟踪评价说明")),
+                "跟踪误差(%)": n(r.get("跟踪误差(%)")),
+                "第一梯队阈值(%)": n(r.get("第一梯队阈值(%)")),
+                "第二梯队阈值(%)": n(r.get("第二梯队阈值(%)")),
+            }
+        )
+
+    meta = {
+        "snapshot": str(core["统计日期"].iloc[0]) if len(core) else "",
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "fund_count": len(rows),
+        "direction_list": sorted({r["投资方向标签"] for r in rows if r["投资方向标签"]}),
+        "trend": day_trend.to_dict(orient="records"),
+    }
+    return rows, notes.to_dict(orient="records"), meta
+
+
+def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
+    payload = json.dumps(rows, ensure_ascii=False)
+    notes_payload = json.dumps(notes_rows, ensure_ascii=False, default=str)
+    meta_payload = json.dumps(meta, ensure_ascii=False)
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>基金详情运营驾驶舱</title>
+  <style>
+    body {{ margin:0; font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:#f4f7fb; color:#1f2937; }}
+    .wrap {{ max-width:1700px; margin:0 auto; padding:16px; }}
+    .card {{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px; }}
+    .head {{ display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap; }}
+    .jump-links {{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 10px; }}
+    .jump-links a {{ text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#111827; border-radius:8px; padding:6px 10px; font-size:13px; }}
+    .jump-links a.on {{ background:#111827; color:#fff; border-color:#111827; }}
+    .title {{ font-size:26px; font-weight:800; }}
+    .sub {{ color:#64748b; font-size:13px; margin-top:4px; }}
+    .filters {{ display:grid; grid-template-columns: 220px 240px 300px; gap:8px; margin-top:10px; }}
+    select,input {{ width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:13px; }}
+    .kpis {{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px; }}
+    .kpi {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; }}
+    .kpi .k {{ color:#6b7280; font-size:12px; }}
+    .kpi .v {{ font-size:24px; font-weight:700; margin-top:4px; }}
+    .grid2 {{ display:grid; grid-template-columns: 1.2fr 0.8fr; gap:10px; }}
+    .grid2b {{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }}
+    .chart {{ width:100%; height:420px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }}
+    .trend {{ width:100%; height:260px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }}
+    .box-title {{ font-weight:700; margin-bottom:8px; }}
+    .list li {{ margin:6px 0; font-size:13px; }}
+    table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+    th,td {{ border-bottom:1px solid #e5e7eb; text-align:left; padding:8px; }}
+    th {{ position:sticky; top:0; background:#f8fafc; }}
+    .area {{ max-height:460px; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; }}
+    .muted {{ color:#6b7280; }}
+    .tag {{ display:inline-block; border:1px solid #dbeafe; background:#eff6ff; color:#1d4ed8; border-radius:999px; padding:2px 8px; font-size:12px; }}
+    @media (max-width: 1200px) {{ .grid2,.grid2b {{ grid-template-columns:1fr; }} .filters {{ grid-template-columns:1fr; }} .kpis {{ grid-template-columns:repeat(2,1fr); }} }}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <div>
+        <div class="title">基金详情运营驾驶舱</div>
+        <div class="sub">快照日期：<span id="snapshot"></span> ｜ 生成时间：<span id="gen"></span></div>
+      </div>
+      <div class="muted">目标：先看转化效率，再看内容热度，再用基金分析近1年做质量复核</div>
+    </div>
+    <div class="jump-links">
+      <a href="/">核心看板</a>
+      <a class="on" href="/fund-detail-cockpit">基金详情驾驶舱</a>
+      <a href="/ops-metrics">动态指标看板</a>
+      <a href="/competitor-weakness">竞品弱点看板</a>
+      <a href="/metrics-doc">指标文档</a>
+    </div>
+    <div class="filters">
+      <select id="direction"></select>
+      <select id="board">
+        <option value="">全部榜单</option>
+        <option value="加仓榜">加仓榜</option>
+        <option value="减仓榜">减仓榜</option>
+      </select>
+      <input id="q" placeholder="搜索基金名称/代码" />
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="k">样本基金数</div><div class="v" id="k_count">-</div></div>
+      <div class="kpi"><div class="k">近7天提及文章总数</div><div class="v" id="k_mention">-</div></div>
+      <div class="kpi"><div class="k">动态总互动量（赞+评）</div><div class="v" id="k_interact">-</div></div>
+      <div class="kpi"><div class="k">高关注基金数（自选P75）</div><div class="v" id="k_focus">-</div></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="box-title">主视图：浏览热度 vs 关转比（气泡=自选人数，颜色=投资方向）</div>
+      <svg id="scatter" class="chart"></svg>
+    </div>
+    <div class="card">
+      <div class="box-title">运营Top榜</div>
+      <div class="grid2b">
+        <div>
+          <div class="tag">按关转比 Top10</div>
+          <ol id="top_ctr" class="list"></ol>
+        </div>
+        <div>
+          <div class="tag">按曝关比 Top10</div>
+          <ol id="top_exp" class="list"></ol>
+        </div>
+      </div>
+      <div style="margin-top:8px;">
+        <div class="tag">按近7天提及文章数 Top10</div>
+        <ol id="top_note" class="list"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="box-title">明细A：内容热度与口碑（基金级）</div>
+      <div class="area">
+        <table>
+          <thead>
+            <tr>
+              <th>基金名称</th><th>基金代码</th><th>投资方向</th><th>本周浏览</th><th>自选</th><th>持有</th><th>曝关比</th><th>关转比</th><th>提及文章(7天)</th><th>笔记互动总量</th><th>笔记平均互动率(%)</th>
+            </tr>
+          </thead>
+          <tbody id="tb_a"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="box-title">明细A补充：按天内容趋势（发帖数/互动量）</div>
+      <svg id="trend" class="trend"></svg>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="box-title">明细B：基金分析近1年（跟踪质量分层）</div>
+    <div class="sub">分层口径：跟踪误差 ≤ 第一梯队阈值 = 第一梯队；介于第一/第二阈值 = 第二梯队；> 第二阈值 = 偏弱。</div>
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:10px;margin-top:10px;">
+      <div>
+        <ul id="tier_stats" class="list"></ul>
+      </div>
+      <div class="area" style="max-height:340px;">
+        <table>
+          <thead>
+            <tr>
+              <th>基金名称</th><th>基金代码</th><th>投资方向</th><th>跟踪指数</th><th>指数收益(%)</th><th>跟踪误差(%)</th><th>第一阈值</th><th>第二阈值</th><th>评价</th><th>梯队</th>
+            </tr>
+          </thead>
+          <tbody id="tb_b"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {payload};
+const NOTES = {notes_payload};
+const META = {meta_payload};
+const fmt = x => Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "";
+const n = x => Number.isFinite(Number(x)) ? Number(x) : 0;
+const byId = id => document.getElementById(id);
+
+byId("snapshot").textContent = META.snapshot || "-";
+byId("gen").textContent = META.generated_at || "-";
+
+const dirSel = byId("direction");
+const dirs = ["全部投资方向", ...(META.direction_list || [])];
+dirSel.innerHTML = dirs.map(x => `<option value="${{x === "全部投资方向" ? "" : x}}">${{x}}</option>`).join("");
+
+function filtered() {{
+  const d = dirSel.value;
+  const b = byId("board").value;
+  const q = byId("q").value.trim();
+  return DATA.filter(r => {{
+    if (d && r["投资方向标签"] !== d) return false;
+    if (b && r["榜单类型"] !== b) return false;
+    if (q && !(String(r["基金名称"]||"").includes(q) || String(r["基金代码"]||"").includes(q))) return false;
+    return true;
+  }});
+}}
+
+function percentile(arr, p) {{
+  const a = [...arr].sort((x,y)=>x-y);
+  if (!a.length) return 0;
+  const i = Math.floor((a.length-1)*p);
+  return a[i];
+}}
+
+function renderKPI(rows) {{
+  byId("k_count").textContent = rows.length;
+  byId("k_mention").textContent = Math.round(rows.reduce((s,r)=>s+n(r["近7天提及文章数"]),0));
+  byId("k_interact").textContent = Math.round(rows.reduce((s,r)=>s+n(r["笔记互动总量"]),0));
+  const p75 = percentile(rows.map(r=>n(r["自选人数"])), 0.75);
+  byId("k_focus").textContent = rows.filter(r=>n(r["自选人数"])>=p75 && p75>0).length;
+}}
+
+function colorByDirection(name) {{
+  const palette = ["#2563eb","#16a34a","#d97706","#db2777","#0d9488","#7c3aed","#dc2626","#0891b2","#4f46e5","#ca8a04"];
+  const keys = META.direction_list || [];
+  const idx = Math.max(0, keys.indexOf(name));
+  return palette[idx % palette.length];
+}}
+
+function renderScatter(rows) {{
+  const svg = byId("scatter");
+  const W = svg.clientWidth || 800, H = svg.clientHeight || 420;
+  const pad = 46;
+  const xs = rows.map(r=>n(r["本周浏览人数"])); const ys = rows.map(r=>n(r["关转比"])); const ss = rows.map(r=>n(r["自选人数"]));
+  const xmin = 0, xmax = Math.max(1, ...xs); const ymin = 0, ymax = Math.max(0.5, ...ys);
+  const smin = Math.max(1, Math.min(...ss, 1)); const smax = Math.max(smin, ...ss);
+  const sx = v => pad + (v-xmin)/(xmax-xmin||1)*(W-pad*2);
+  const sy = v => H-pad - (v-ymin)/(ymax-ymin||1)*(H-pad*2);
+  const sr = v => 5 + (v-smin)/(smax-smin||1)*15;
+
+  let html = `<rect x="0" y="0" width="${{W}}" height="${{H}}" fill="#fff"/>`;
+  html += `<line x1="${{pad}}" y1="${{H-pad}}" x2="${{W-pad}}" y2="${{H-pad}}" stroke="#cbd5e1"/>`;
+  html += `<line x1="${{pad}}" y1="${{pad}}" x2="${{pad}}" y2="${{H-pad}}" stroke="#cbd5e1"/>`;
+  html += `<text x="${{W/2}}" y="${{H-10}}" text-anchor="middle" fill="#64748b" font-size="12">本周浏览人数</text>`;
+  html += `<text x="14" y="${{H/2}}" transform="rotate(-90 14 ${{H/2}})" text-anchor="middle" fill="#64748b" font-size="12">关转比</text>`;
+  for (const r of rows.slice(0, 300)) {{
+    const cx = sx(n(r["本周浏览人数"])), cy = sy(n(r["关转比"])), rr = sr(n(r["自选人数"]));
+    const col = colorByDirection(r["投资方向标签"]);
+    const tip = `${{r["基金名称"]}} (${{r["基金代码"]}})\\n投资方向:${{r["投资方向标签"]}}\\n浏览:${{Math.round(n(r["本周浏览人数"]))}} 关转比:${{fmt(n(r["关转比"]))}} 自选:${{Math.round(n(r["自选人数"]))}}`;
+    html += `<circle cx="${{cx}}" cy="${{cy}}" r="${{rr}}" fill="${{col}}" fill-opacity="0.38" stroke="${{col}}"><title>${{tip}}</title></circle>`;
+  }}
+  svg.innerHTML = html;
+}}
+
+function topList(rows, key, el, fmtFn) {{
+  const arr = [...rows].sort((a,b)=>n(b[key])-n(a[key])).slice(0,10);
+  byId(el).innerHTML = arr.map(r=>`<li>${{r["基金名称"]}}（${{r["基金代码"]}}）${{fmtFn(r)}}</li>`).join("");
+}}
+
+function renderTableA(rows) {{
+  const arr = [...rows].sort((a,b)=>n(b["关转比"])-n(a["关转比"]));
+  byId("tb_a").innerHTML = arr.slice(0, 300).map(r => `<tr>
+    <td>${{r["基金名称"]||""}}</td><td>${{r["基金代码"]||""}}</td><td>${{r["投资方向标签"]||""}}</td>
+    <td>${{Math.round(n(r["本周浏览人数"]))}}</td><td>${{Math.round(n(r["自选人数"]))}}</td><td>${{Math.round(n(r["持有人数"]))}}</td>
+    <td>${{fmt(n(r["曝关比"]))}}</td><td>${{fmt(n(r["关转比"]))}}</td>
+    <td>${{Math.round(n(r["近7天提及文章数"]))}}</td><td>${{Math.round(n(r["笔记互动总量"]))}}</td><td>${{fmt(n(r["笔记平均互动率"]))}}</td>
+  </tr>`).join("");
+}}
+
+function renderTrend() {{
+  const svg = byId("trend");
+  const W = svg.clientWidth || 700, H = svg.clientHeight || 260, pad=34;
+  const ts = (META.trend || []).filter(x=>x["日"]);
+  if (!ts.length) {{ svg.innerHTML = ""; return; }}
+  const xs = ts.map((_,i)=>i);
+  const y1 = ts.map(x=>n(x["发帖数"])), y2 = ts.map(x=>n(x["互动量"]));
+  const ymax = Math.max(1, ...y1, ...y2);
+  const sx = i => pad + i/(Math.max(1,xs.length-1))*(W-pad*2);
+  const sy = v => H-pad - v/ymax*(H-pad*2);
+  const p1 = xs.map((i,idx)=>`${{sx(i)}},${{sy(y1[idx])}}`).join(" ");
+  const p2 = xs.map((i,idx)=>`${{sx(i)}},${{sy(y2[idx])}}`).join(" ");
+  let html = `<rect x="0" y="0" width="${{W}}" height="${{H}}" fill="#fff"/>`;
+  html += `<polyline points="${{p1}}" fill="none" stroke="#2563eb" stroke-width="2"/><polyline points="${{p2}}" fill="none" stroke="#ef4444" stroke-width="2"/>`;
+  html += `<text x="12" y="20" fill="#2563eb" font-size="12">发帖数</text><text x="70" y="20" fill="#ef4444" font-size="12">互动量</text>`;
+  svg.innerHTML = html;
+}}
+
+function tier(row) {{
+  const e = n(row["跟踪误差(%)"]), l = n(row["第一梯队阈值(%)"]), h = n(row["第二梯队阈值(%)"]);
+  if (!e) return "未披露";
+  if (l && e <= l) return "第一梯队";
+  if (h && e <= h) return "第二梯队";
+  if (h && e > h) return "偏弱";
+  return "未分层";
+}}
+
+function renderTableB(rows) {{
+  const arr = rows.filter(r=>r["跟踪指数名称"] || n(r["跟踪误差(%)"])>0).map(r=>({{...r, _tier:tier(r)}}));
+  byId("tb_b").innerHTML = arr.slice(0, 300).map(r=>`<tr>
+    <td>${{r["基金名称"]||""}}</td><td>${{r["基金代码"]||""}}</td><td>${{r["投资方向标签"]||""}}</td><td>${{r["跟踪指数名称"]||""}}</td>
+    <td>${{fmt(n(r["跟踪指数收益率(%)"]))}}</td><td>${{fmt(n(r["跟踪误差(%)"]))}}</td>
+    <td>${{fmt(n(r["第一梯队阈值(%)"]))}}</td><td>${{fmt(n(r["第二梯队阈值(%)"]))}}</td>
+    <td>${{r["跟踪评价标题"]||""}} ${{r["跟踪评价说明"]||""}}</td><td>${{r["_tier"]}}</td>
+  </tr>`).join("");
+  const c = {{"第一梯队":0,"第二梯队":0,"偏弱":0,"未披露":0,"未分层":0}};
+  for (const r of arr) c[r._tier] = (c[r._tier]||0)+1;
+  byId("tier_stats").innerHTML = Object.entries(c).map(([k,v])=>`<li>${{k}}：${{v}} 只</li>`).join("");
+}}
+
+function render() {{
+  const rows = filtered();
+  renderKPI(rows);
+  renderScatter(rows);
+  topList(rows, "关转比", "top_ctr", r => `｜关转比 ${{fmt(n(r["关转比"]))}}`);
+  topList(rows, "曝关比", "top_exp", r => `｜曝关比 ${{fmt(n(r["曝关比"]))}}`);
+  topList(rows, "近7天提及文章数", "top_note", r => `｜近7天提及文章数 ${{Math.round(n(r["近7天提及文章数"]))}}`);
+  renderTableA(rows);
+  renderTrend();
+  renderTableB(rows);
+}}
+
+[dirSel, byId("board"), byId("q")].forEach(el => el.addEventListener("input", render));
+render();
+</script>
+</body>
+</html>"""
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build fund detail operations dashboard.")
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
+
+    in_path = Path(args.input)
+    out_path = Path(args.output)
+    if not in_path.exists():
+        raise SystemExit(f"Input not found: {in_path}")
+
+    rows, notes, meta = load_data(in_path)
+    out_path.write_text(build_html(rows, notes, meta), encoding="utf-8")
+    print(out_path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
