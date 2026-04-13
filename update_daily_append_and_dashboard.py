@@ -101,6 +101,17 @@ def norm_code(v: Any) -> str:
     return s.zfill(6) if s.isdigit() else s
 
 
+def norm_return_pct(v: Any) -> float | None:
+    """Normalize percent fields; some API rows occasionally come scaled by 10000."""
+    x = pd.to_numeric(v, errors="coerce")
+    if pd.isna(x):
+        return None
+    x = float(x)
+    if abs(x) > 100:
+        x = x / 10000.0
+    return x
+
+
 def fetch_one_combo(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
     type_name = f"{RANKING_KIND_LABEL[ranking_kind]}-{FUND_SCOPE_LABEL[fund_scope]}"
     page_no = 1
@@ -141,9 +152,9 @@ def build_new_rows(token: str, day: date, show_by: int, company_map: dict[str, s
                         "基金简称": r.get("fundName"),
                         "基金代码": norm_code(r.get("fundCode")),
                         "基金类型": r.get("fundType"),
-                        "日涨跌幅(%)": r.get("dayInc"),
-                        "近1月涨跌幅(%)": r.get("monthInc"),
-                        "近1年涨跌幅(%)": r.get("yearInc"),
+                        "日涨跌幅(%)": norm_return_pct(r.get("dayInc")),
+                        "近1月涨跌幅(%)": norm_return_pct(r.get("monthInc")),
+                        "近1年涨跌幅(%)": norm_return_pct(r.get("yearInc")),
                         "近7日上榜天数": r.get("onRank7d"),
                         "连续上榜天数": r.get("consecutiveDay"),
                         "名次变动": r.get("rankChange"),
@@ -163,6 +174,9 @@ def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     for df in (add_df, sub_df, raw_df, new_df):
         df["基金代码"] = df["基金代码"].map(norm_code)
         df["统计日期"] = pd.to_datetime(df["统计日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+        for c in ["日涨跌幅(%)", "近1月涨跌幅(%)", "近1年涨跌幅(%)"]:
+            if c in df.columns:
+                df[c] = df[c].map(norm_return_pct)
 
     add_new = new_df[new_df["榜单类型"] == "加仓榜"]
     sub_new = new_df[new_df["榜单类型"] == "减仓榜"]

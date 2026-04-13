@@ -23,6 +23,15 @@ def to_num(v: Any) -> float | None:
         return None
 
 
+def norm_return_pct(v: Any) -> float | None:
+    x = to_num(v)
+    if x is None:
+        return None
+    if abs(x) > 100:
+        return x / 10000.0
+    return x
+
+
 def norm_code(v: Any) -> str:
     if v is None:
         return ""
@@ -72,9 +81,9 @@ def read_sheet(path: Path, sheet: str, board: str, invest_map: dict[str, str]) -
                 "fund_category": str(r.get("基金类型") or ""),
                 "company_name": str(r.get("基金公司名称") or ""),
                 "rank": to_num(r.get("榜单名次")),
-                "day_ret": to_num(r.get("日涨跌幅(%)")),
-                "month_ret": to_num(r.get("近1月涨跌幅(%)")),
-                "year_ret": to_num(r.get("近1年涨跌幅(%)")),
+                "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
+                "month_ret": norm_return_pct(r.get("近1月涨跌幅(%)")),
+                "year_ret": norm_return_pct(r.get("近1年涨跌幅(%)")),
                 "on_rank_7d": to_num(r.get("近7日上榜天数")),
                 "consecutive_day": to_num(r.get("连续上榜天数")),
                 "rank_change": to_num(r.get("名次变动")),

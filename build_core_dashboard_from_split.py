@@ -35,6 +35,15 @@ def to_num(v: Any) -> float | None:
     return float(n)
 
 
+def norm_return_pct(v: Any) -> float | None:
+    n = to_num(v)
+    if n is None:
+        return None
+    if abs(n) > 100:
+        return n / 10000.0
+    return n
+
+
 def load_invest_direction_map(detail_raw_json: Path) -> dict[str, str]:
     if not detail_raw_json.exists():
         return {}
@@ -79,8 +88,8 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
                 "invest_direction": invest_map.get(norm_code(r.get("基金代码")), ""),
                 "fund_category": str(r.get("基金类型") or ""),
                 "rank": to_num(r.get("榜单名次")),
-                "day_ret": to_num(r.get("日涨跌幅(%)")),
-                "month_ret": to_num(r.get("近1月涨跌幅(%)")),
+                "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
+                "month_ret": norm_return_pct(r.get("近1月涨跌幅(%)")),
             }
         )
     latest_date = ""

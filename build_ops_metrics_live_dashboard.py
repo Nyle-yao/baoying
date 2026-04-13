@@ -23,6 +23,15 @@ def to_num(v: Any) -> float | None:
         return None
 
 
+def norm_return_pct(v: Any) -> float | None:
+    x = to_num(v)
+    if x is None:
+        return None
+    if abs(x) > 100:
+        return x / 10000.0
+    return x
+
+
 def norm_code(v: Any) -> str:
     if v is None:
         return ""
@@ -73,8 +82,8 @@ def load_rows(workbook: Path, detail_raw_json: Path) -> tuple[list[dict[str, Any
                     "invest_direction": invest_map.get(norm_code(r.get("基金代码")), ""),
                     "fund_category": str(r.get("基金类型") or ""),
                     "rank": to_num(r.get("榜单名次")),
-                    "day_ret": to_num(r.get("日涨跌幅(%)")),
-                    "month_ret": to_num(r.get("近1月涨跌幅(%)")),
+                    "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
+                    "month_ret": norm_return_pct(r.get("近1月涨跌幅(%)")),
                 }
             )
     dates = sorted({r["date"] for r in rows})
