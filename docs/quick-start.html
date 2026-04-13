@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>看板快速上手指南</title>
+  <style>
+    :root{--bg:#f7fafc;--card:#fff;--line:#e2e8f0;--text:#1f2937;--muted:#64748b;--brand:#0f172a}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+    .wrap{max-width:1100px;margin:0 auto;padding:20px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+    h1,h2{margin:0 0 10px}
+    p,li{line-height:1.65}
+    .muted{color:var(--muted)}
+    .links a{display:inline-block;margin:6px 8px 0 0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text);background:#fff}
+    .links a:hover{border-color:#94a3b8}
+    code{background:#f1f5f9;padding:1px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>宝盈基金看板快速上手指南</h1>
+    <p class="muted">适用对象：首次接触本项目的运营/投放/内容同事。更新时间：2026-04-13</p>
+    <div class="links">
+      <a href="./index.html">核心看板</a>
+      <a href="./ops-metrics.html">动态指标看板</a>
+      <a href="./competitor-weakness.html">竞品弱点看板</a>
+      <a href="./fund-detail-cockpit.html">基金详情驾驶舱</a>
+      <a href="./metrics-doc.html">指标文档</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>推荐使用顺序</h2>
+    <ol>
+      <li>先看“核心看板”：确认今日热点与榜单方向。</li>
+      <li>再看“动态指标”：判断短期热点还是趋势延续。</li>
+      <li>再看“竞品弱点”：筛选可突破的同业标的。</li>
+      <li>最后看“驾驶舱”：验证用户行为与内容互动。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>更新时间说明</h2>
+    <ul>
+      <li>工作日 <code>16:00</code> 自动更新并部署。</li>
+      <li>GitHub Pages 是静态站点，“手动更新按钮”不可用属于正常。</li>
+      <li>16:00 前看到“更新至前一日”是正常现象。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>常见问题</h2>
+    <ul>
+      <li>页面不更新：先强刷浏览器（macOS：<code>Cmd + Shift + R</code>）。</li>
+      <li>指标文档提示“暂未生成”：仅该页缺失，其他看板不受影响。</li>
+      <li>部署失败：优先检查 Pages 设置与 Actions Secrets。</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
