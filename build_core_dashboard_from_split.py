@@ -103,28 +103,32 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>核心看板（加仓/减仓/双边/当日排序）</title>
   <style>
-    body {{ margin: 0; font-family: "PingFang SC","Microsoft YaHei",sans-serif; background: #f5f7fb; color: #1f2937; }}
+    :root {{
+      --bg:#f5f7fb; --text:#1f2937; --card:#ffffff; --border:#cbd5e1; --softborder:#e2e8f0; --muted:#64748b; --accent:#111827; --thead:#f8fafc;
+    }}
+    body {{ margin: 0; font-family: "PingFang SC","Microsoft YaHei",sans-serif; background: var(--bg); color: var(--text); }}
     .wrap {{ max-width: 1520px; margin: 0 auto; padding: 16px; }}
-    .card {{ background:#fff; border-radius:10px; padding:12px; margin-bottom:12px; box-shadow: 0 1px 6px rgba(0,0,0,.08); }}
-    .tabs button {{ margin-right:8px; border:1px solid #cbd5e1; background:#fff; border-radius:8px; padding:6px 12px; cursor:pointer; }}
-    .tabs .on {{ background:#111827; color:#fff; border-color:#111827; }}
+    .card {{ background:var(--card); border-radius:10px; padding:12px; margin-bottom:12px; box-shadow: 0 1px 6px rgba(0,0,0,.08); }}
+    .tabs button {{ margin-right:8px; border:1px solid var(--border); background:var(--card); border-radius:8px; padding:6px 12px; cursor:pointer; color:var(--text); }}
+    .tabs .on {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
     .filters {{ display:grid; grid-template-columns: 180px 180px 180px 180px 280px; gap:8px; }}
-    select,input {{ width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; }}
-    .tiny-note {{ font-size:12px; color:#64748b; margin-top:4px; line-height:1.2; }}
+    select,input {{ width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--text); }}
+    .tiny-note {{ font-size:12px; color:var(--muted); margin-top:4px; line-height:1.2; }}
     .status-note {{ font-size:13px; color:#b45309; margin-top:8px; }}
     table {{ width:100%; border-collapse:collapse; font-size:13px; }}
-    th,td {{ padding:8px; border-bottom:1px solid #e2e8f0; text-align:left; }}
-    th {{ background:#f8fafc; position:sticky; top:0; }}
+    th,td {{ padding:8px; border-bottom:1px solid var(--softborder); text-align:left; }}
+    th {{ background:var(--thead); position:sticky; top:0; }}
     th.sortable {{ cursor:pointer; user-select:none; }}
-    .sort-mark {{ margin-left:4px; color:#64748b; font-size:12px; }}
+    .sort-mark {{ margin-left:4px; color:var(--muted); font-size:12px; }}
     .area {{ max-height:68vh; overflow:auto; }}
     .meta-row {{ display:grid; grid-template-columns: 1fr 1fr auto; gap:8px; margin-top:10px; }}
-    .meta-box {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px; font-size:13px; }}
-    .btn {{ border:1px solid #111827; background:#111827; color:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }}
+    .meta-box {{ background:var(--thead); border:1px solid var(--softborder); border-radius:8px; padding:8px; font-size:13px; }}
+    .btn {{ border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }}
     .jump-links {{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 10px; }}
-    .jump-links a {{ text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#111827; border-radius:8px; padding:6px 10px; font-size:13px; }}
-    .jump-links a.on {{ background:#111827; color:#fff; border-color:#111827; }}
+    .jump-links a {{ text-decoration:none; border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:8px; padding:6px 10px; font-size:13px; }}
+    .jump-links a.on {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
     .page-desc {{ font-size:13px; color:#475569; margin:2px 0 8px; }}
+    .style-row {{ display:grid; grid-template-columns: 220px 1fr; gap:8px; margin-top:8px; }}
   </style>
 </head>
 <body>
@@ -160,6 +164,21 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       <div class="filters" style="margin-top:8px; grid-template-columns: 1fr;">
         <input id="q" placeholder="搜索基金名称/代码" />
       </div>
+      <div class="style-row">
+        <select id="theme_sel">
+          <option value="org">机构简报风</option>
+          <option value="terminal">交易终端风</option>
+          <option value="research">券商研究风</option>
+          <option value="minimal">极简运营风</option>
+          <option value="news">数据新闻风</option>
+          <option value="industrial">工业仪表风</option>
+          <option value="guofeng">国风金融风</option>
+          <option value="tech">科技蓝图风</option>
+          <option value="warm">暖色决策风</option>
+          <option value="brand">品牌定制风</option>
+        </select>
+        <div class="tiny-note">风格切换面板：只改视觉样式，不影响数据与计算。</div>
+      </div>
       <div class="status-note" id="status_note"></div>
       <div class="meta-row">
         <div class="meta-box">最新数据日期：<span id="meta_latest"></span></div>
@@ -190,11 +209,37 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     const typeSel = document.getElementById("type");
     const fundTypeSel = document.getElementById("fund_type");
     const qInput = document.getElementById("q");
+    const themeSel = document.getElementById("theme_sel");
     const statusNote = document.getElementById("status_note");
     const thead = document.getElementById("thead");
     const tbody = document.getElementById("tb");
     const btnUpdate = document.getElementById("btn_update");
     let sortState = {{ key: "m7", order: "desc" }};
+    const THEMES = {{
+      org:       {{bg:'#f5f7fb',text:'#1f2937',card:'#ffffff',border:'#cbd5e1',softborder:'#e2e8f0',muted:'#64748b',accent:'#111827',thead:'#f8fafc'}},
+      terminal:  {{bg:'#0b1220',text:'#dbeafe',card:'#111827',border:'#1f2937',softborder:'#1f2937',muted:'#93c5fd',accent:'#22c55e',thead:'#0f172a'}},
+      research:  {{bg:'#f7f4ee',text:'#1f2937',card:'#fffdf8',border:'#e5dccb',softborder:'#efe7d9',muted:'#6b7280',accent:'#1d4ed8',thead:'#faf7f0'}},
+      minimal:   {{bg:'#fafafa',text:'#111827',card:'#ffffff',border:'#e5e7eb',softborder:'#e5e7eb',muted:'#6b7280',accent:'#111827',thead:'#f9fafb'}},
+      news:      {{bg:'#fffaf5',text:'#111827',card:'#ffffff',border:'#f1e4d5',softborder:'#f1e4d5',muted:'#7c6f64',accent:'#b45309',thead:'#fff7ed'}},
+      industrial:{{bg:'#101827',text:'#e5e7eb',card:'#111827',border:'#374151',softborder:'#374151',muted:'#9ca3af',accent:'#0ea5e9',thead:'#0f172a'}},
+      guofeng:   {{bg:'#faf6ef',text:'#2c1f16',card:'#fffaf2',border:'#e8d9bf',softborder:'#e8d9bf',muted:'#6b4f3f',accent:'#8b5e34',thead:'#f6efe3'}},
+      tech:      {{bg:'#06131f',text:'#d1fae5',card:'#0b2233',border:'#155e75',softborder:'#155e75',muted:'#67e8f9',accent:'#06b6d4',thead:'#082f49'}},
+      warm:      {{bg:'#fff7ed',text:'#431407',card:'#fffbf5',border:'#fed7aa',softborder:'#fed7aa',muted:'#9a3412',accent:'#ea580c',thead:'#ffedd5'}},
+      brand:     {{bg:'#f3f7ff',text:'#1e3a8a',card:'#ffffff',border:'#bfdbfe',softborder:'#bfdbfe',muted:'#3b82f6',accent:'#2563eb',thead:'#eff6ff'}},
+    }};
+    function applyTheme(name) {{
+      const t = THEMES[name] || THEMES.org;
+      const root = document.documentElement;
+      root.style.setProperty('--bg', t.bg);
+      root.style.setProperty('--text', t.text);
+      root.style.setProperty('--card', t.card);
+      root.style.setProperty('--border', t.border);
+      root.style.setProperty('--softborder', t.softborder);
+      root.style.setProperty('--muted', t.muted);
+      root.style.setProperty('--accent', t.accent);
+      root.style.setProperty('--thead', t.thead);
+      try {{ localStorage.setItem('dashboard_theme', name); }} catch(e) {{}}
+    }}
 
     const uniq = arr => [...new Set(arr)];
     const dates = uniq(DATA.map(r => r.date)).filter(Boolean).sort((a,b)=>a>b?-1:1);
@@ -247,6 +292,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     tabSub.addEventListener("click", () => setTab("sub"));
     tabBoth.addEventListener("click", () => setTab("both"));
     tabDaily.addEventListener("click", () => setTab("daily"));
+    themeSel.addEventListener("input", () => applyTheme(themeSel.value));
     [dateSel, dailyBoardSel, typeSel, fundTypeSel, qInput].forEach(el => el.addEventListener("input", render));
     function bindSortableHeaders() {{
       document.querySelectorAll("th.sortable").forEach(th => {{
@@ -445,6 +491,11 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
         `).join("");
       }}
     }}
+    try {{
+      const savedTheme = localStorage.getItem('dashboard_theme') || localStorage.getItem('core_theme') || 'org';
+      if (THEMES[savedTheme]) themeSel.value = savedTheme;
+      applyTheme(themeSel.value);
+    }} catch(e) {{ applyTheme('org'); }}
     setTab("add");
   </script>
 </body>
