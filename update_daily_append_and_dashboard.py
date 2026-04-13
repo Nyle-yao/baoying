@@ -101,6 +101,15 @@ def norm_code(v: Any) -> str:
     return s.zfill(6) if s.isdigit() else s
 
 
+def clean_fund_name(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.endswith("-道乐数据"):
+        s = s[: -len("-道乐数据")].rstrip()
+    return s
+
+
 def norm_return_pct(v: Any) -> float | None:
     """Normalize percent fields; some API rows occasionally come scaled by 10000."""
     x = pd.to_numeric(v, errors="coerce")
@@ -112,7 +121,7 @@ def norm_return_pct(v: Any) -> float | None:
     return x
 
 
-def fetch_one_combo(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
+def fetch_one_combo_once(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
     type_name = f"{RANKING_KIND_LABEL[ranking_kind]}-{FUND_SCOPE_LABEL[fund_scope]}"
     page_no = 1
     rows: list[dict[str, Any]] = []
@@ -135,21 +144,47 @@ def fetch_one_combo(token: str, date_str: str, ranking_kind: str, fund_scope: st
     return rows
 
 
+def combo_signature(rows: list[dict[str, Any]]) -> tuple[str, ...]:
+    sig: list[str] = []
+    for r in rows:
+        sig.append(f"{norm_code(r.get('fundCode'))}|{clean_fund_name(r.get('fundName'))}")
+    return tuple(sig)
+
+
+def fetch_one_combo(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
+    """Fetch with stability guard: retry until two consecutive identical snapshots."""
+    best_rows: list[dict[str, Any]] | None = None
+    prev_sig: tuple[str, ...] | None = None
+    for attempt in range(1, 4):
+        rows = fetch_one_combo_once(token, date_str, ranking_kind, fund_scope, show_by)
+        sig = combo_signature(rows)
+        if prev_sig is not None and sig == prev_sig:
+            return rows
+        prev_sig = sig
+        best_rows = rows
+        if attempt < 3:
+            time.sleep(1)
+    # Source may fluctuate; keep last snapshot but ensure deterministic order usage downstream.
+    return best_rows or []
+
+
 def build_new_rows(token: str, day: date, show_by: int, company_map: dict[str, str]) -> pd.DataFrame:
     date_str = day.strftime("%Y-%m-%d")
     out: list[dict[str, Any]] = []
     for k in ["add", "sub"]:
         for s in ["all", "stock", "bond", "qd"]:
             rows = fetch_one_combo(token, date_str, k, s, show_by)
-            for r in rows:
+            for idx, r in enumerate(rows, start=1):
                 cid = str(r.get("companyId") or "").strip()
                 out.append(
                     {
                         "统计日期": date_str,
                         "榜单类型": RANKING_KIND_LABEL[k],
                         "基金范围": FUND_SCOPE_LABEL[s],
-                        "榜单名次": r.get("ranking"),
-                        "基金简称": r.get("fundName"),
+                        # API field "ranking" can contain abnormal values on some days.
+                        # Use returned list order to keep consistency with frontend display.
+                        "榜单名次": idx,
+                        "基金简称": clean_fund_name(r.get("fundName")),
                         "基金代码": norm_code(r.get("fundCode")),
                         "基金类型": r.get("fundType"),
                         "日涨跌幅(%)": norm_return_pct(r.get("dayInc")),
@@ -166,6 +201,65 @@ def build_new_rows(token: str, day: date, show_by: int, company_map: dict[str, s
     return pd.DataFrame(out)
 
 
+def recompute_derived_days(df: pd.DataFrame) -> pd.DataFrame:
+    """Recompute near-7 and consecutive days from local historical rows."""
+    if df.empty:
+        return df
+    out = df.copy()
+    out["统计日期"] = pd.to_datetime(out["统计日期"], errors="coerce")
+    out = out.sort_values(["榜单类型", "基金范围", "统计日期", "榜单名次"], ascending=[True, True, True, True])
+
+    on7 = pd.Series(index=out.index, dtype="Int64")
+    consec = pd.Series(index=out.index, dtype="Int64")
+
+    for (rank_type, scope), scope_df in out.groupby(["榜单类型", "基金范围"], sort=False):
+        scope_dates = sorted(scope_df["统计日期"].dropna().unique().tolist())
+        date_pos = {d: i for i, d in enumerate(scope_dates)}
+        for _, g in scope_df.groupby("基金代码", sort=False):
+            g = g.sort_values("统计日期")
+            seen_dates = g["统计日期"].tolist()
+            seen_set = set(seen_dates)
+
+            prev_pos = None
+            run = 0
+            for i, (idx, row) in enumerate(g.iterrows()):
+                d = row["统计日期"]
+                p = date_pos.get(d)
+                if p is None:
+                    continue
+                if prev_pos is not None and p == prev_pos + 1:
+                    run += 1
+                else:
+                    run = 1
+                prev_pos = p
+
+                left = max(0, p - 6)
+                window_dates = scope_dates[left : p + 1]
+                cnt7 = sum(1 for wd in window_dates if wd in seen_set)
+                on7.loc[idx] = cnt7
+                consec.loc[idx] = run
+
+    out["近7日上榜天数"] = on7.fillna(0).astype(int)
+    out["连续上榜天数"] = consec.fillna(0).astype(int)
+    out["统计日期"] = out["统计日期"].dt.strftime("%Y-%m-%d")
+    return out
+
+
+def reindex_rank(df: pd.DataFrame, has_board_type: bool) -> pd.DataFrame:
+    out = df.copy()
+    out["统计日期"] = pd.to_datetime(out["统计日期"], errors="coerce")
+    out["榜单名次"] = pd.to_numeric(out["榜单名次"], errors="coerce")
+    out["__rank_sort__"] = out["榜单名次"].fillna(10**9)
+    group_cols = ["统计日期", "基金范围"]
+    if has_board_type:
+        group_cols = ["统计日期", "榜单类型", "基金范围"]
+    out = out.sort_values(group_cols + ["__rank_sort__", "基金代码"], ascending=True)
+    out["榜单名次"] = out.groupby(group_cols, sort=False).cumcount() + 1
+    out = out.drop(columns=["__rank_sort__"])
+    out["统计日期"] = out["统计日期"].dt.strftime("%Y-%m-%d")
+    return out
+
+
 def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     add_df = pd.read_excel(workbook, sheet_name="加仓榜")
     sub_df = pd.read_excel(workbook, sheet_name="减仓榜")
@@ -180,11 +274,27 @@ def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
 
     add_new = new_df[new_df["榜单类型"] == "加仓榜"]
     sub_new = new_df[new_df["榜单类型"] == "减仓榜"]
+    new_dates = set(new_df["统计日期"].dropna().astype(str).tolist())
 
-    key_cols = ["统计日期", "榜单类型", "基金范围", "基金代码", "基金简称"]
+    # Day-level replace: remove same day rows first, then append fresh crawl rows.
+    if new_dates:
+        add_df = add_df[~add_df["统计日期"].astype(str).isin(new_dates)]
+        sub_df = sub_df[~sub_df["统计日期"].astype(str).isin(new_dates)]
+        raw_df = raw_df[~raw_df["统计日期"].astype(str).isin(new_dates)]
+
+    # Use stable business keys to avoid duplicate rows when display names vary by source text.
+    key_cols = ["统计日期", "榜单类型", "基金范围", "基金代码"]
     add_all = pd.concat([add_df, add_new], ignore_index=True).drop_duplicates(subset=key_cols, keep="last")
     sub_all = pd.concat([sub_df, sub_new], ignore_index=True).drop_duplicates(subset=key_cols, keep="last")
     raw_all = pd.concat([raw_df, new_df], ignore_index=True).drop_duplicates(subset=key_cols, keep="last")
+
+    # Recompute derived day-count fields to avoid upstream API anomalies.
+    raw_all = recompute_derived_days(raw_all)
+    add_all = recompute_derived_days(add_all)
+    sub_all = recompute_derived_days(sub_all)
+    raw_all = reindex_rank(raw_all, has_board_type=True)
+    add_all = reindex_rank(add_all, has_board_type=False)
+    sub_all = reindex_rank(sub_all, has_board_type=False)
 
     add_all = add_all.sort_values(["统计日期", "基金范围", "榜单名次"], ascending=[False, True, True])
     sub_all = sub_all.sort_values(["统计日期", "基金范围", "榜单名次"], ascending=[False, True, True])
