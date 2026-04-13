@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>运营指标总览看板（指标字典版）</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --line: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --brand: #0f172a;
+      --tag: #eef2ff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "PingFang SC","Microsoft YaHei",sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1680px; margin: 0 auto; padding: 16px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    h1 { margin: 0; font-size: 24px; }
+    .sub { color: var(--muted); margin-top: 6px; font-size: 13px; }
+    .toolbar { display: grid; grid-template-columns: 1fr 260px; gap: 8px; margin-top: 10px; }
+    .style-row { display:grid; grid-template-columns: 220px 1fr; gap: 8px; margin-top: 8px; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tab { border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+    .tab.on { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .jump-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .jump-links a { text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#111827; border-radius:8px; padding:6px 10px; font-size:13px; }
+    .jump-links a.on { background:#111827; color:#fff; border-color:#111827; }
+    .page-desc { color: #475569; margin-top: 6px; font-size: 13px; }
+    input { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; font-size: 13px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+    .kpi { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+    .kpi .t { color: var(--muted); font-size: 12px; }
+    .kpi .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px; vertical-align: top; }
+    th { background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+    .area { max-height: 72vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+    .tag { display: inline-block; background: var(--tag); color: #3730a3; border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    .muted { color: var(--muted); }
+    @media (max-width: 1100px) {
+      .toolbar { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>运营指标总览看板（指标字典版）</h1>
+    <div class="jump-links">
+      <a href="/">核心看板</a>
+      <a href="/fund-detail-cockpit">基金详情驾驶舱</a>
+      <a href="/ops-metrics">动态指标看板</a>
+      <a href="/competitor-weakness">竞品弱点看板</a>
+      <a class="on" href="/metrics-doc">指标文档</a>
+    </div>
+    <div class="page-desc">这张表是“指标说明书”，告诉你每个指标怎么算、有什么用、该怎么用。</div>
+    <div class="sub">按“运营可执行”设计：每个指标都给出计算方式、目的、适用动作。该看板是说明看板，不替代原始数据看板。</div>
+    <div class="sub">字段补充：明细类看板中，“基金代码”列后已新增“投资方向”标签（来源：基金详情页 userFollowData.fundTypeFirst）。</div>
+    <div class="style-row">
+      <select id="theme_sel">
+        <option value="org">机构简报风</option>
+        <option value="terminal">交易终端风</option>
+        <option value="research">券商研究风</option>
+        <option value="minimal">极简运营风</option>
+        <option value="news">数据新闻风</option>
+        <option value="industrial">工业仪表风</option>
+        <option value="guofeng">国风金融风</option>
+        <option value="tech">科技蓝图风</option>
+        <option value="warm">暖色决策风</option>
+        <option value="brand">品牌定制风</option>
+      </select>
+      <div class="sub" style="margin:0;">风格切换面板：只改视觉样式，不影响数据与计算。</div>
+    </div>
+    <div class="toolbar">
+      <div class="tabs" id="tabs"></div>
+      <input id="q" placeholder="搜索指标/用途/动作" />
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="t">指标总数</div><div id="k_total" class="v">-</div></div>
+      <div class="kpi"><div class="t">当前分类指标数</div><div id="k_curr" class="v">-</div></div>
+      <div class="kpi"><div class="t">竞品指标数</div><div id="k_comp" class="v">-</div></div>
+      <div class="kpi"><div class="t">风向指标数</div><div id="k_core" class="v">-</div></div>
+    </div>
+  </div>
+
+  <div class="card area">
+    <table>
+      <thead>
+        <tr>
+          <th style="min-width:130px">分类</th>
+          <th style="min-width:180px">指标名</th>
+          <th style="min-width:360px">计算方式</th>
+          <th style="min-width:260px">目的</th>
+          <th style="min-width:320px">运营动作建议</th>
+        </tr>
+      </thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const METRICS = [
+  // 风向核心
+  {c:'风向核心', n:'近7日上榜次数', f:'截至所选日期，过去7天上榜次数（双边按“日期+榜单类型”计次）', p:'识别短期热点', a:'用于日常内容选题与快速投放'},
+  {c:'风向核心', n:'近2周上榜次数', f:'截至所选日期，过去14天上榜次数', p:'判断热度是否延续', a:'决定是否进入持续投放池'},
+  {c:'风向核心', n:'近1月上榜次数', f:'截至所选日期，过去30天上榜次数', p:'识别中期稳定关注', a:'作为重点产品池优先级依据'},
+  {c:'风向核心', n:'风向分', f:'100*(0.5*7日标准分+0.3*14日标准分+0.2*30日标准分)', p:'多周期热度一体化排序', a:'默认排序主键，减少人工多列判断'},
+  {c:'风向核心', n:'净偏好值（加-减）', f:'加仓样本量（或次数）-减仓样本量（或次数）', p:'判断偏多/偏空情绪', a:'指导当天策略偏进攻或偏防守'},
+  {c:'风向核心', n:'短期热度（7日均值）', f:'当前筛选基金近7日上榜次数均值', p:'衡量近期活跃程度', a:'决定是否加大短期内容资源'},
+  {c:'风向核心', n:'趋势延续（14/30均值）', f:'当前筛选基金((14日+30日)/2)均值', p:'衡量趋势稳定性', a:'决定是否做连续专题/栏目化运营'},
+  {c:'风向核心', n:'分歧预警数', f:'满足双边活跃阈值基金数量（例：14日双边>=8）', p:'识别高争议标的', a:'提前配置舆情和风险提示'},
+
+  // 收益验证
+  {c:'收益验证', n:'近1周涨跌幅', f:'近7日日涨跌幅复利：Π(1+r_i)-1', p:'验证短期热度是否有收益支撑', a:'热度高但收益弱时降低推荐强度'},
+  {c:'收益验证', n:'近2周涨跌幅', f:'近14日日涨跌幅复利', p:'验证中短期趋势质量', a:'用于筛选“可持续讲故事”的产品'},
+  {c:'收益验证', n:'近1月涨跌幅', f:'优先接口monthInc最新值（或30日复利统一口径）', p:'验证中期收益匹配度', a:'和热度联合评估是否纳入主推池'},
+  {c:'收益验证', n:'日涨跌幅', f:'截至日当日涨跌幅（接口字段）', p:'解释当天排名变化', a:'用于当日快讯解读与内容标题'},
+
+  // 信号与预警
+  {c:'信号与预警', n:'短期热点标签', f:'近7日高，且14/30未同步高', p:'识别新热点', a:'快速跟进内容与短周期投放'},
+  {c:'信号与预警', n:'趋势延续标签', f:'14日与30日都高', p:'识别稳定热度', a:'持续投放、做系列内容'},
+  {c:'信号与预警', n:'分歧预警标签', f:'双边活跃高（加减同现）', p:'识别高争议', a:'加强风险提示、优化客服FAQ'},
+  {c:'信号与预警', n:'退潮观察标签', f:'7日明显弱于14日（动量转弱）', p:'识别退潮', a:'降权处理，减少资源占用'},
+
+  // 竞品弱点
+  {c:'竞品弱点', n:'综合弱点分', f:'0.25*热度空转度+0.20*分歧度+0.20*衰减度+0.20*名次脆弱度+0.15*连续性断层率', p:'识别可突破竞品', a:'按分层执行狙击策略'},
+  {c:'竞品弱点', n:'热度空转度', f:'近7日热度强度*收益偏弱因子（近1周/近1月收益弱则分高）', p:'找“有流量没业绩支撑”', a:'推收益更稳替代品承接流量'},
+  {c:'竞品弱点', n:'分歧度', f:'min(近7日加仓,近7日减仓)/(加仓+减仓)后标准化', p:'找用户意见分裂标的', a:'做对比内容、抢决策中人群'},
+  {c:'竞品弱点', n:'衰减度', f:'前段热度-最近7日热度（下降越大分越高）', p:'识别退潮窗口', a:'抢关键词与入口位'},
+  {c:'竞品弱点', n:'名次脆弱度', f:'近7日名次标准差标准化', p:'识别排名不稳', a:'加强替代推荐与稳定性叙事'},
+  {c:'竞品弱点', n:'连续性断层率', f:'近30日上榜日期断档次数/可比较间隔数', p:'识别持续性弱', a:'强调长期稳健、降低对手粘性'},
+  {c:'竞品弱点', n:'竞品标签分层', f:'综合弱点分分层：>=70高优先狙击，50-69重点观察，30-49跟踪观察', p:'统一优先级', a:'指导团队排兵布阵'},
+
+  // 驾驶舱指标
+  {c:'驾驶舱指标', n:'样本基金数（驾驶舱）', f:'当前筛选后基金记录数', p:'判断样本覆盖是否充分', a:'样本过小时避免过度结论'},
+  {c:'驾驶舱指标', n:'近7天提及文章总数', f:'∑基金级“近7天提及文章数”', p:'衡量近期内容讨论热度', a:'指导内容资源投放强度'},
+  {c:'驾驶舱指标', n:'动态总互动量', f:'∑(点赞数+评论数)', p:'衡量用户参与度', a:'高互动主题优先做专题运营'},
+  {c:'驾驶舱指标', n:'高关注基金数', f:'自选人数≥P75的基金数量', p:'识别高意向人群集中标的', a:'优先配置转化链路与客服资源'},
+  {c:'驾驶舱指标', n:'本周浏览人数', f:'userFollowData.weekVisit', p:'衡量最近访问热度', a:'和关转比联动识别“高流量低转化”'},
+  {c:'驾驶舱指标', n:'关转比', f:'userFollowData.followToConversionRatio', p:'衡量关注到持有的转化效率', a:'作为主推优先级核心指标'},
+  {c:'驾驶舱指标', n:'曝关比', f:'userFollowData.exposureToFollowRatio', p:'衡量曝光到关注效率', a:'优化素材和入口位置'},
+  {c:'驾驶舱指标', n:'曝转比', f:'userFollowData.exposureToConversionRatio', p:'衡量曝光到持有效率', a:'评估投放终端质量'},
+  {c:'驾驶舱指标', n:'自选人数', f:'userFollowData.optional', p:'衡量潜在意向池规模', a:'用于气泡大小与优先分层'},
+  {c:'驾驶舱指标', n:'持有人数', f:'userFollowData.hold', p:'衡量存量持有人基础', a:'用于判断维护/拉新策略侧重'},
+  {c:'驾驶舱指标', n:'投资方向标签', f:'fundDetail.fundInfoVO.investment', p:'区分主题赛道', a:'同方向基金横向比较'},
+  {c:'驾驶舱指标', n:'投资方向说明', f:'fundDetail.fundInfoVO.investmentDesc', p:'解释标签语义', a:'汇报与内容文案引用'},
+  {c:'驾驶舱指标', n:'笔记互动总量（基金级）', f:'基金维度∑(点赞数+评论数)', p:'衡量基金口碑活跃度', a:'识别可放大传播的产品'},
+  {c:'驾驶舱指标', n:'笔记平均互动率（基金级）', f:'基金维度有效互动率均值', p:'衡量内容质量', a:'筛选优质内容样本'},
+  {c:'驾驶舱指标', n:'按天发帖数', f:'动态和笔记按“发布时间-日”聚合计数', p:'观察热度节奏', a:'安排内容发布时间窗口'},
+  {c:'驾驶舱指标', n:'按天互动量', f:'动态和笔记按天聚合∑(点赞+评论)', p:'观察讨论爆发点', a:'追踪热点与复盘活动效果'},
+  {c:'驾驶舱指标', n:'跟踪指数名称', f:'fundAnalyze.showTrackName', p:'识别比较基准', a:'同指数产品做质量对比'},
+  {c:'驾驶舱指标', n:'跟踪指数收益率(%)', f:'fundAnalyze.showTrackYield', p:'衡量指数端表现', a:'解释基金分析背景'},
+  {c:'驾驶舱指标', n:'跟踪误差(%)', f:'fundAnalyze.trackingErrorValue', p:'衡量跟踪质量偏离', a:'用于梯队分层与质量预警'},
+  {c:'驾驶舱指标', n:'第一梯队阈值(%)', f:'fundAnalyze.trackingErrorLowThreshold', p:'定义高质量阈值', a:'标注优先推荐标的'},
+  {c:'驾驶舱指标', n:'第二梯队阈值(%)', f:'fundAnalyze.trackingErrorHighThreshold', p:'定义次优阈值', a:'区分中等与偏弱标的'},
+  {c:'驾驶舱指标', n:'跟踪质量梯队', f:'误差<=第一阈值=第一梯队；第一<误差<=第二=第二梯队；误差>第二=偏弱', p:'直观看质量分层', a:'把资源集中给高质量且高转化基金'},
+
+  // 口径与时效
+  {c:'口径与时效', n:'当日排序', f:'当日表按所选日期+榜单（加/减）展示原始榜单名次', p:'查看纯当天排名', a:'用于日报与当日应急决策'},
+  {c:'口径与时效', n:'数据新鲜度提示', f:'比较最新数据日期与今天/所选日期', p:'避免口径误读', a:'汇报时标注“更新至X日”'}
+];
+
+const cats = ['全部', ...new Set(METRICS.map(x=>x.c))];
+const themeSel = document.getElementById('theme_sel');
+const THEMES = {
+  org:       {bg:'#f5f7fb',text:'#1f2937',card:'#ffffff',line:'#e5e7eb',muted:'#64748b',brand:'#111827',soft:'#cbd5e1',tag:'#eef2ff'},
+  terminal:  {bg:'#0b1220',text:'#dbeafe',card:'#111827',line:'#1f2937',muted:'#93c5fd',brand:'#22c55e',soft:'#1f2937',tag:'#052e16'},
+  research:  {bg:'#f7f4ee',text:'#1f2937',card:'#fffdf8',line:'#e5dccb',muted:'#6b7280',brand:'#1d4ed8',soft:'#d6ccb8',tag:'#e0ecff'},
+  minimal:   {bg:'#fafafa',text:'#111827',card:'#ffffff',line:'#e5e7eb',muted:'#6b7280',brand:'#111827',soft:'#d1d5db',tag:'#f3f4f6'},
+  news:      {bg:'#fffaf5',text:'#111827',card:'#ffffff',line:'#f1e4d5',muted:'#7c6f64',brand:'#b45309',soft:'#e9d5b5',tag:'#ffedd5'},
+  industrial:{bg:'#101827',text:'#e5e7eb',card:'#111827',line:'#374151',muted:'#9ca3af',brand:'#0ea5e9',soft:'#4b5563',tag:'#0c4a6e'},
+  guofeng:   {bg:'#faf6ef',text:'#2c1f16',card:'#fffaf2',line:'#e8d9bf',muted:'#6b4f3f',brand:'#8b5e34',soft:'#d8c2a0',tag:'#fef3c7'},
+  tech:      {bg:'#06131f',text:'#d1fae5',card:'#0b2233',line:'#155e75',muted:'#67e8f9',brand:'#06b6d4',soft:'#0e7490',tag:'#083344'},
+  warm:      {bg:'#fff7ed',text:'#431407',card:'#fffbf5',line:'#fed7aa',muted:'#9a3412',brand:'#ea580c',soft:'#fdba74',tag:'#ffedd5'},
+  brand:     {bg:'#f3f7ff',text:'#1e3a8a',card:'#ffffff',line:'#bfdbfe',muted:'#3b82f6',brand:'#2563eb',soft:'#93c5fd',tag:'#dbeafe'},
+};
+function applyTheme(name){
+  const t = THEMES[name] || THEMES.org;
+  const root = document.documentElement;
+  root.style.setProperty('--bg', t.bg);
+  root.style.setProperty('--text', t.text);
+  root.style.setProperty('--card', t.card);
+  root.style.setProperty('--line', t.line);
+  root.style.setProperty('--muted', t.muted);
+  root.style.setProperty('--brand', t.brand);
+  root.style.setProperty('--soft', t.soft);
+  root.style.setProperty('--tag', t.tag);
+  try { localStorage.setItem('dashboard_theme', name); } catch(e) {}
+}
+let current = '全部';
+const tabs = document.getElementById('tabs');
+const qInput = document.getElementById('q');
+const tb = document.getElementById('tb');
+
+function renderTabs(){
+  tabs.innerHTML = cats.map(c => `<button class="tab ${c===current?'on':''}" data-c="${c}">${c}</button>`).join('');
+  tabs.querySelectorAll('.tab').forEach(b => b.onclick = () => { current = b.dataset.c; renderTabs(); renderTable(); });
+}
+
+function renderTable(){
+  const q = qInput.value.trim();
+  const rows = METRICS.filter(x => {
+    if (current !== '全部' && x.c !== current) return false;
+    if (!q) return true;
+    return [x.c,x.n,x.f,x.p,x.a].join(' ').includes(q);
+  });
+
+  document.getElementById('k_total').textContent = METRICS.length;
+  document.getElementById('k_curr').textContent = rows.length;
+  document.getElementById('k_comp').textContent = METRICS.filter(x=>x.c==='竞品弱点').length;
+  document.getElementById('k_core').textContent = METRICS.filter(x=>x.c==='风向核心').length;
+
+  tb.innerHTML = rows.map(x => `<tr>
+    <td><span class="tag">${x.c}</span></td>
+    <td><strong>${x.n}</strong></td>
+    <td>${x.f}</td>
+    <td>${x.p}</td>
+    <td class="muted">${x.a}</td>
+  </tr>`).join('');
+}
+
+qInput.addEventListener('input', renderTable);
+themeSel.addEventListener('input', () => applyTheme(themeSel.value));
+try {
+  const savedTheme = localStorage.getItem('dashboard_theme') || localStorage.getItem('core_theme') || 'org';
+  if (THEMES[savedTheme]) themeSel.value = savedTheme;
+  applyTheme(themeSel.value);
+} catch(e) { applyTheme('org'); }
+renderTabs();
+renderTable();
+</script>
+</body>
+</html>

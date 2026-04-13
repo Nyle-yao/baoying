@@ -128,33 +128,35 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>基金详情运营驾驶舱</title>
   <style>
-    body {{ margin:0; font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:#f4f7fb; color:#1f2937; }}
+    :root {{ --bg:#f4f7fb; --text:#1f2937; --card:#fff; --line:#e5e7eb; --muted:#64748b; --accent:#111827; --thead:#f8fafc; --soft:#cbd5e1; --tagbg:#eff6ff; --tagtext:#1d4ed8; }}
+    body {{ margin:0; font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }}
     .wrap {{ max-width:1700px; margin:0 auto; padding:16px; }}
-    .card {{ background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:12px; }}
+    .card {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }}
     .head {{ display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap; }}
     .jump-links {{ display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 10px; }}
-    .jump-links a {{ text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#111827; border-radius:8px; padding:6px 10px; font-size:13px; }}
-    .jump-links a.on {{ background:#111827; color:#fff; border-color:#111827; }}
+    .jump-links a {{ text-decoration:none; border:1px solid var(--soft); background:var(--card); color:var(--text); border-radius:8px; padding:6px 10px; font-size:13px; }}
+    .jump-links a.on {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
     .title {{ font-size:26px; font-weight:800; }}
-    .sub {{ color:#64748b; font-size:13px; margin-top:4px; }}
+    .sub {{ color:var(--muted); font-size:13px; margin-top:4px; }}
     .filters {{ display:grid; grid-template-columns: 220px 240px 300px; gap:8px; margin-top:10px; }}
-    select,input {{ width:100%; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:13px; }}
+    select,input {{ width:100%; border:1px solid var(--soft); border-radius:8px; padding:8px; font-size:13px; background:var(--card); color:var(--text); }}
+    .style-row {{ display:grid; grid-template-columns:220px 1fr; gap:8px; margin-top:8px; }}
     .kpis {{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px; }}
-    .kpi {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; }}
-    .kpi .k {{ color:#6b7280; font-size:12px; }}
+    .kpi {{ background:var(--thead); border:1px solid var(--line); border-radius:10px; padding:10px; }}
+    .kpi .k {{ color:var(--muted); font-size:12px; }}
     .kpi .v {{ font-size:24px; font-weight:700; margin-top:4px; }}
     .grid2 {{ display:grid; grid-template-columns: 1.2fr 0.8fr; gap:10px; }}
     .grid2b {{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }}
-    .chart {{ width:100%; height:420px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }}
-    .trend {{ width:100%; height:260px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; }}
+    .chart {{ width:100%; height:420px; border:1px solid var(--line); border-radius:10px; background:var(--card); }}
+    .trend {{ width:100%; height:260px; border:1px solid var(--line); border-radius:10px; background:var(--card); }}
     .box-title {{ font-weight:700; margin-bottom:8px; }}
     .list li {{ margin:6px 0; font-size:13px; }}
     table {{ width:100%; border-collapse:collapse; font-size:13px; }}
-    th,td {{ border-bottom:1px solid #e5e7eb; text-align:left; padding:8px; }}
-    th {{ position:sticky; top:0; background:#f8fafc; }}
-    .area {{ max-height:460px; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; }}
-    .muted {{ color:#6b7280; }}
-    .tag {{ display:inline-block; border:1px solid #dbeafe; background:#eff6ff; color:#1d4ed8; border-radius:999px; padding:2px 8px; font-size:12px; }}
+    th,td {{ border-bottom:1px solid var(--line); text-align:left; padding:8px; }}
+    th {{ position:sticky; top:0; background:var(--thead); }}
+    .area {{ max-height:460px; overflow:auto; border:1px solid var(--line); border-radius:10px; }}
+    .muted {{ color:var(--muted); }}
+    .tag {{ display:inline-block; border:1px solid var(--soft); background:var(--tagbg); color:var(--tagtext); border-radius:999px; padding:2px 8px; font-size:12px; }}
     @media (max-width: 1200px) {{ .grid2,.grid2b {{ grid-template-columns:1fr; }} .filters {{ grid-template-columns:1fr; }} .kpis {{ grid-template-columns:repeat(2,1fr); }} }}
   </style>
 </head>
@@ -183,6 +185,21 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
         <option value="减仓榜">减仓榜</option>
       </select>
       <input id="q" placeholder="搜索基金名称/代码" />
+    </div>
+    <div class="style-row">
+      <select id="theme_sel">
+        <option value="org">机构简报风</option>
+        <option value="terminal">交易终端风</option>
+        <option value="research">券商研究风</option>
+        <option value="minimal">极简运营风</option>
+        <option value="news">数据新闻风</option>
+        <option value="industrial">工业仪表风</option>
+        <option value="guofeng">国风金融风</option>
+        <option value="tech">科技蓝图风</option>
+        <option value="warm">暖色决策风</option>
+        <option value="brand">品牌定制风</option>
+      </select>
+      <div class="sub">风格切换面板：只改视觉样式，不影响数据与计算。</div>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="k">样本基金数</div><div class="v" id="k_count">-</div></div>
@@ -264,6 +281,34 @@ const META = {meta_payload};
 const fmt = x => Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "";
 const n = x => Number.isFinite(Number(x)) ? Number(x) : 0;
 const byId = id => document.getElementById(id);
+const themeSel = byId("theme_sel");
+const THEMES = {{
+  org:       {{bg:'#f5f7fb',text:'#1f2937',card:'#ffffff',line:'#e5e7eb',muted:'#64748b',accent:'#111827',thead:'#f8fafc',soft:'#cbd5e1',tagbg:'#eff6ff',tagtext:'#1d4ed8'}},
+  terminal:  {{bg:'#0b1220',text:'#dbeafe',card:'#111827',line:'#1f2937',muted:'#93c5fd',accent:'#22c55e',thead:'#0f172a',soft:'#1f2937',tagbg:'#052e16',tagtext:'#86efac'}},
+  research:  {{bg:'#f7f4ee',text:'#1f2937',card:'#fffdf8',line:'#e5dccb',muted:'#6b7280',accent:'#1d4ed8',thead:'#faf7f0',soft:'#d6ccb8',tagbg:'#e0ecff',tagtext:'#1e40af'}},
+  minimal:   {{bg:'#fafafa',text:'#111827',card:'#ffffff',line:'#e5e7eb',muted:'#6b7280',accent:'#111827',thead:'#f9fafb',soft:'#d1d5db',tagbg:'#f3f4f6',tagtext:'#111827'}},
+  news:      {{bg:'#fffaf5',text:'#111827',card:'#ffffff',line:'#f1e4d5',muted:'#7c6f64',accent:'#b45309',thead:'#fff7ed',soft:'#e9d5b5',tagbg:'#ffedd5',tagtext:'#9a3412'}},
+  industrial:{{bg:'#101827',text:'#e5e7eb',card:'#111827',line:'#374151',muted:'#9ca3af',accent:'#0ea5e9',thead:'#0f172a',soft:'#4b5563',tagbg:'#0c4a6e',tagtext:'#bae6fd'}},
+  guofeng:   {{bg:'#faf6ef',text:'#2c1f16',card:'#fffaf2',line:'#e8d9bf',muted:'#6b4f3f',accent:'#8b5e34',thead:'#f6efe3',soft:'#d8c2a0',tagbg:'#fef3c7',tagtext:'#7c2d12'}},
+  tech:      {{bg:'#06131f',text:'#d1fae5',card:'#0b2233',line:'#155e75',muted:'#67e8f9',accent:'#06b6d4',thead:'#082f49',soft:'#0e7490',tagbg:'#083344',tagtext:'#67e8f9'}},
+  warm:      {{bg:'#fff7ed',text:'#431407',card:'#fffbf5',line:'#fed7aa',muted:'#9a3412',accent:'#ea580c',thead:'#ffedd5',soft:'#fdba74',tagbg:'#ffedd5',tagtext:'#9a3412'}},
+  brand:     {{bg:'#f3f7ff',text:'#1e3a8a',card:'#ffffff',line:'#bfdbfe',muted:'#3b82f6',accent:'#2563eb',thead:'#eff6ff',soft:'#93c5fd',tagbg:'#dbeafe',tagtext:'#1e3a8a'}},
+}};
+function applyTheme(name) {{
+  const t = THEMES[name] || THEMES.org;
+  const root = document.documentElement;
+  root.style.setProperty('--bg', t.bg);
+  root.style.setProperty('--text', t.text);
+  root.style.setProperty('--card', t.card);
+  root.style.setProperty('--line', t.line);
+  root.style.setProperty('--muted', t.muted);
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--thead', t.thead);
+  root.style.setProperty('--soft', t.soft);
+  root.style.setProperty('--tagbg', t.tagbg);
+  root.style.setProperty('--tagtext', t.tagtext);
+  try {{ localStorage.setItem('dashboard_theme', name); }} catch(e) {{}}
+}}
 
 byId("snapshot").textContent = META.snapshot || "-";
 byId("gen").textContent = META.generated_at || "-";
@@ -399,6 +444,12 @@ function render() {{
 }}
 
 [dirSel, byId("board"), byId("q")].forEach(el => el.addEventListener("input", render));
+themeSel.addEventListener("input", () => applyTheme(themeSel.value));
+try {{
+  const savedTheme = localStorage.getItem('dashboard_theme') || localStorage.getItem('core_theme') || 'org';
+  if (THEMES[savedTheme]) themeSel.value = savedTheme;
+  applyTheme(themeSel.value);
+}} catch(e) {{ applyTheme('org'); }}
 render();
 </script>
 </body>

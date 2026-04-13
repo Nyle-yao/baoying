@@ -107,30 +107,32 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>竞品弱点雷达附表</title>
   <style>
-    body { margin:0; font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:#f6f8fb; color:#1f2937; }
+    :root { --bg:#f6f8fb; --text:#1f2937; --card:#fff; --line:#e5e7eb; --muted:#64748b; --accent:#111827; --thead:#f8fafc; --soft:#cbd5e1; --tagredbg:#fee2e2; --tagred:#991b1b; --tagorangebg:#ffedd5; --tagorange:#9a3412; --tagbluebg:#dbeafe; --tagblue:#1e40af; --taggraybg:#e5e7eb; --taggray:#374151; }
+    body { margin:0; font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
     .wrap { max-width:1650px; margin:0 auto; padding:16px; }
-    .card { background:#fff; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.08); padding:12px; margin-bottom:12px; }
-    .tabs button { margin-right:8px; border:1px solid #cbd5e1; background:#fff; border-radius:8px; padding:6px 12px; cursor:pointer; }
-    .tabs .on { background:#111827; color:#fff; border-color:#111827; }
+    .card { background:var(--card); border-radius:10px; border:1px solid var(--line); padding:12px; margin-bottom:12px; }
+    .tabs button { margin-right:8px; border:1px solid var(--soft); background:var(--card); border-radius:8px; padding:6px 12px; cursor:pointer; color:var(--text); }
+    .tabs .on { background:var(--accent); color:#fff; border-color:var(--accent); }
     .filters { display:grid; grid-template-columns:180px 180px 180px 300px; gap:8px; margin-top:8px; }
-    select,input { width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; }
-    .tiny { font-size:12px; color:#64748b; margin-top:6px; }
+    select,input { width:100%; padding:8px; border:1px solid var(--soft); border-radius:8px; background:var(--card); color:var(--text); }
+    .tiny { font-size:12px; color:var(--muted); margin-top:6px; }
+    .style-row { display:grid; grid-template-columns:220px 1fr; gap:8px; margin-top:8px; }
     .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px; }
-    .kpi { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px; }
+    .kpi { background:var(--thead); border:1px solid var(--line); border-radius:8px; padding:8px; }
     .kpi .v { font-size:22px; font-weight:700; margin-top:2px; }
     .area { max-height:70vh; overflow:auto; }
     table { width:100%; border-collapse:collapse; font-size:13px; }
-    th,td { padding:8px; border-bottom:1px solid #e2e8f0; text-align:left; }
-    th { background:#f8fafc; position:sticky; top:0; }
+    th,td { padding:8px; border-bottom:1px solid var(--line); text-align:left; }
+    th { background:var(--thead); position:sticky; top:0; }
     th.sortable { cursor:pointer; user-select:none; }
     .tag { display:inline-block; border-radius:999px; padding:2px 8px; font-size:12px; }
-    .t-red { background:#fee2e2; color:#991b1b; }
-    .t-orange { background:#ffedd5; color:#9a3412; }
-    .t-blue { background:#dbeafe; color:#1e40af; }
-    .t-gray { background:#e5e7eb; color:#374151; }
+    .t-red { background:var(--tagredbg); color:var(--tagred); }
+    .t-orange { background:var(--tagorangebg); color:var(--tagorange); }
+    .t-blue { background:var(--tagbluebg); color:var(--tagblue); }
+    .t-gray { background:var(--taggraybg); color:var(--taggray); }
     .jump-links { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 10px; }
-    .jump-links a { text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#111827; border-radius:8px; padding:6px 10px; font-size:13px; }
-    .jump-links a.on { background:#111827; color:#fff; border-color:#111827; }
+    .jump-links a { text-decoration:none; border:1px solid var(--soft); background:var(--card); color:var(--text); border-radius:8px; padding:6px 10px; font-size:13px; }
+    .jump-links a.on { background:var(--accent); color:#fff; border-color:var(--accent); }
     .page-desc { font-size:13px; color:#475569; margin:2px 0 8px; }
   </style>
 </head>
@@ -156,6 +158,21 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
       <select id=\"type\"></select>
       <select id=\"fund_type\"></select>
       <input id=\"q\" placeholder=\"搜索基金名称/代码/公司\" />
+    </div>
+    <div class=\"style-row\">
+      <select id=\"theme_sel\">
+        <option value=\"org\">机构简报风</option>
+        <option value=\"terminal\">交易终端风</option>
+        <option value=\"research\">券商研究风</option>
+        <option value=\"minimal\">极简运营风</option>
+        <option value=\"news\">数据新闻风</option>
+        <option value=\"industrial\">工业仪表风</option>
+        <option value=\"guofeng\">国风金融风</option>
+        <option value=\"tech\">科技蓝图风</option>
+        <option value=\"warm\">暖色决策风</option>
+        <option value=\"brand\">品牌定制风</option>
+      </select>
+      <div class=\"tiny\">风格切换面板：只改视觉样式，不影响数据与计算。</div>
     </div>
     <div id=\"note\" class=\"tiny\"></div>
     <div class=\"kpis\">
@@ -217,8 +234,42 @@ const dateSel = document.getElementById('date');
 const typeSel = document.getElementById('type');
 const fundTypeSel = document.getElementById('fund_type');
 const qInput = document.getElementById('q');
+const themeSel = document.getElementById('theme_sel');
 const tb = document.getElementById('tb');
 const note = document.getElementById('note');
+const THEMES = {
+  org:       {bg:'#f5f7fb',text:'#1f2937',card:'#ffffff',line:'#e5e7eb',muted:'#64748b',accent:'#111827',thead:'#f8fafc',soft:'#cbd5e1',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#ffedd5',tagorange:'#9a3412',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+  terminal:  {bg:'#0b1220',text:'#dbeafe',card:'#111827',line:'#1f2937',muted:'#93c5fd',accent:'#22c55e',thead:'#0f172a',soft:'#1f2937',tagredbg:'#7f1d1d',tagred:'#fecaca',tagorangebg:'#78350f',tagorange:'#fed7aa',tagbluebg:'#1e3a8a',tagblue:'#bfdbfe',taggraybg:'#374151',taggray:'#d1d5db'},
+  research:  {bg:'#f7f4ee',text:'#1f2937',card:'#fffdf8',line:'#e5dccb',muted:'#6b7280',accent:'#1d4ed8',thead:'#faf7f0',soft:'#d6ccb8',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#ffedd5',tagorange:'#9a3412',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+  minimal:   {bg:'#fafafa',text:'#111827',card:'#ffffff',line:'#e5e7eb',muted:'#6b7280',accent:'#111827',thead:'#f9fafb',soft:'#d1d5db',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#ffedd5',tagorange:'#9a3412',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+  news:      {bg:'#fffaf5',text:'#111827',card:'#ffffff',line:'#f1e4d5',muted:'#7c6f64',accent:'#b45309',thead:'#fff7ed',soft:'#e9d5b5',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#ffedd5',tagorange:'#9a3412',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+  industrial:{bg:'#101827',text:'#e5e7eb',card:'#111827',line:'#374151',muted:'#9ca3af',accent:'#0ea5e9',thead:'#0f172a',soft:'#4b5563',tagredbg:'#7f1d1d',tagred:'#fecaca',tagorangebg:'#78350f',tagorange:'#fed7aa',tagbluebg:'#0c4a6e',tagblue:'#bae6fd',taggraybg:'#374151',taggray:'#d1d5db'},
+  guofeng:   {bg:'#faf6ef',text:'#2c1f16',card:'#fffaf2',line:'#e8d9bf',muted:'#6b4f3f',accent:'#8b5e34',thead:'#f6efe3',soft:'#d8c2a0',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#fef3c7',tagorange:'#92400e',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+  tech:      {bg:'#06131f',text:'#d1fae5',card:'#0b2233',line:'#155e75',muted:'#67e8f9',accent:'#06b6d4',thead:'#082f49',soft:'#0e7490',tagredbg:'#7f1d1d',tagred:'#fecaca',tagorangebg:'#78350f',tagorange:'#fed7aa',tagbluebg:'#083344',tagblue:'#67e8f9',taggraybg:'#334155',taggray:'#cbd5e1'},
+  warm:      {bg:'#fff7ed',text:'#431407',card:'#fffbf5',line:'#fed7aa',muted:'#9a3412',accent:'#ea580c',thead:'#ffedd5',soft:'#fdba74',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#ffedd5',tagorange:'#9a3412',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+  brand:     {bg:'#f3f7ff',text:'#1e3a8a',card:'#ffffff',line:'#bfdbfe',muted:'#3b82f6',accent:'#2563eb',thead:'#eff6ff',soft:'#93c5fd',tagredbg:'#fee2e2',tagred:'#991b1b',tagorangebg:'#ffedd5',tagorange:'#9a3412',tagbluebg:'#dbeafe',tagblue:'#1e40af',taggraybg:'#e5e7eb',taggray:'#374151'},
+};
+function applyTheme(name) {
+  const t = THEMES[name] || THEMES.org;
+  const root = document.documentElement;
+  root.style.setProperty('--bg', t.bg);
+  root.style.setProperty('--text', t.text);
+  root.style.setProperty('--card', t.card);
+  root.style.setProperty('--line', t.line);
+  root.style.setProperty('--muted', t.muted);
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--thead', t.thead);
+  root.style.setProperty('--soft', t.soft);
+  root.style.setProperty('--tagredbg', t.tagredbg);
+  root.style.setProperty('--tagred', t.tagred);
+  root.style.setProperty('--tagorangebg', t.tagorangebg);
+  root.style.setProperty('--tagorange', t.tagorange);
+  root.style.setProperty('--tagbluebg', t.tagbluebg);
+  root.style.setProperty('--tagblue', t.tagblue);
+  root.style.setProperty('--taggraybg', t.taggraybg);
+  root.style.setProperty('--taggray', t.taggray);
+  try { localStorage.setItem('dashboard_theme', name); } catch(e) {}
+}
 
 const dates = [...new Set(DATA.map(r=>r.date).filter(Boolean))].sort((a,b)=>a>b?-1:1);
 dateSel.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
@@ -419,6 +470,7 @@ function render() {
 }
 
 [dateSel, typeSel, fundTypeSel, qInput].forEach(el => el.addEventListener('input', render));
+themeSel.addEventListener('input', () => applyTheme(themeSel.value));
 document.querySelectorAll('th.sortable').forEach(th => {
   th.addEventListener('click', () => {
     const k = th.dataset.key;
@@ -428,6 +480,11 @@ document.querySelectorAll('th.sortable').forEach(th => {
   });
 });
 
+try {
+  const savedTheme = localStorage.getItem('dashboard_theme') || localStorage.getItem('core_theme') || 'org';
+  if (THEMES[savedTheme]) themeSel.value = savedTheme;
+  applyTheme(themeSel.value);
+} catch(e) { applyTheme('org'); }
 setMode('both');
 </script>
 </body>
