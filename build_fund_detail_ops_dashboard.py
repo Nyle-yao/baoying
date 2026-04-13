@@ -76,6 +76,7 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
             {
                 "基金代码": norm_code(r.get("基金代码")),
                 "基金名称": t(r.get("基金名称")),
+                "基金公司名称": t(r.get("基金公司名称")),
                 "投资方向标签": t(r.get("投资方向标签")) or "未分类",
                 "投资方向说明": t(r.get("投资方向说明")),
                 "榜单类型": t(r.get("榜单类型")),
@@ -184,8 +185,9 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
         <option value="加仓榜">加仓榜</option>
         <option value="减仓榜">减仓榜</option>
       </select>
-      <input id="q" placeholder="搜索基金名称/代码" />
+      <input id="q" placeholder="搜索基金名称/代码/公司" />
     </div>
+    <div class="sub" id="scope_note" style="margin-top:6px;"></div>
     <div class="style-row">
       <select id="theme_sel">
         <option value="org">机构简报风</option>
@@ -324,7 +326,7 @@ function filtered() {{
   return DATA.filter(r => {{
     if (d && r["投资方向标签"] !== d) return false;
     if (b && r["榜单类型"] !== b) return false;
-    if (q && !(String(r["基金名称"]||"").includes(q) || String(r["基金代码"]||"").includes(q))) return false;
+    if (q && !(String(r["基金名称"]||"").includes(q) || String(r["基金代码"]||"").includes(q) || String(r["基金公司名称"]||"").includes(q))) return false;
     return true;
   }});
 }}
@@ -433,6 +435,7 @@ function renderTableB(rows) {{
 
 function render() {{
   const rows = filtered();
+  byId("scope_note").textContent = `当前口径：快照=${{META.snapshot || '-'}}；榜单=${{byId("board").value || "全部"}}；投资方向=${{dirSel.value || "全部"}}；检索=${{(byId("q").value||'').trim() || "无"}}`;
   renderKPI(rows);
   renderScatter(rows);
   topList(rows, "关转比", "top_ctr", r => `｜关转比 ${{fmt(n(r["关转比"]))}}`);

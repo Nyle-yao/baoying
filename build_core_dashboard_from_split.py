@@ -28,6 +28,15 @@ def norm_code(v: Any) -> str:
     return s
 
 
+def clean_fund_name(v: Any) -> str:
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ""
+    s = str(v).strip()
+    if s.endswith("-道乐数据"):
+        s = s[: -len("-道乐数据")].rstrip()
+    return s
+
+
 def to_num(v: Any) -> float | None:
     n = pd.to_numeric(v, errors="coerce")
     if pd.isna(n):
@@ -83,7 +92,7 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
                 else "",
                 "board": str(r.get("榜单") or ""),
                 "type": str(r.get("基金范围") or ""),  # UI displays as 类型 per new naming rule
-                "fund_name": str(r.get("基金简称") or ""),
+                "fund_name": clean_fund_name(r.get("基金简称")),
                 "fund_code": norm_code(r.get("基金代码")),
                 "invest_direction": invest_map.get(norm_code(r.get("基金代码")), ""),
                 "fund_category": str(r.get("基金类型") or ""),
@@ -189,6 +198,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
         <div class="tiny-note">风格切换面板：只改视觉样式，不影响数据与计算。</div>
       </div>
       <div class="status-note" id="status_note"></div>
+      <div class="tiny-note" id="scope_note"></div>
       <div class="meta-row">
         <div class="meta-box">最新数据日期：<span id="meta_latest"></span></div>
         <div class="meta-box">看板生成时间：<span id="meta_gen"></span></div>
@@ -220,6 +230,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     const qInput = document.getElementById("q");
     const themeSel = document.getElementById("theme_sel");
     const statusNote = document.getElementById("status_note");
+    const scopeNote = document.getElementById("scope_note");
     const thead = document.getElementById("thead");
     const tbody = document.getElementById("tb");
     const btnUpdate = document.getElementById("btn_update");
@@ -254,7 +265,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     const dates = uniq(DATA.map(r => r.date)).filter(Boolean).sort((a,b)=>a>b?-1:1);
     dateSel.innerHTML = dates.map(d => `<option value="${{d}}">${{d}}</option>`).join("");
     const types = uniq(DATA.map(r => r.type)).filter(Boolean).sort();
-    typeSel.innerHTML = '<option value="">全部类型</option>' + types.map(t => `<option value="${{t}}">${{t}}</option>`).join("");
+    typeSel.innerHTML = types.map(t => `<option value="${{t}}">${{t}}</option>`).join("");
+    if (types.includes("全部基金")) typeSel.value = "全部基金";
     const fundTypes = uniq(DATA.map(r => r.fund_category)).filter(Boolean).sort();
     fundTypeSel.innerHTML = '<option value="">全部基金类型</option>' + fundTypes.map(t => `<option value="${{t}}">${{t}}</option>`).join("");
     document.getElementById("meta_latest").textContent = META.latest_date || "-";
@@ -354,7 +366,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       if (mode === "daily") {{
         const board = dailyBoardSel.value || "加仓";
         const rows = DATA
-          .filter(r => r.board === board && applyCommonFilter(r, exactDate, "", "", ""))
+          .filter(r => r.board === board && applyCommonFilter(r, exactDate, typeSel.value || "全部基金", "", ""))
           .map(r => ({{
             fund_name: r.fund_name,
             fund_code: r.fund_code,
@@ -437,6 +449,10 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
 
     function render() {{
       const rows = buildRows();
+      const qtxt = (qInput.value || "").trim();
+      scopeNote.textContent = mode === "daily"
+        ? `当前口径：当日排序；日期=${{dateSel.value || META.latest_date}}；榜单=${{dailyBoardSel.value || "加仓榜"}}`
+        : `当前口径：滚动统计；日期=${{dateSel.value || META.latest_date}}；范围=${{typeSel.value || "全部基金"}}；基金类型=${{fundTypeSel.value || "全部"}}；检索=${{qtxt || "无"}}`;
       if (mode === "daily") {{
         thead.innerHTML = `<tr>
           <th>基金名称</th>

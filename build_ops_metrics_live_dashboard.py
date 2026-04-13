@@ -41,6 +41,15 @@ def norm_code(v: Any) -> str:
     return s.zfill(6) if s.isdigit() else s
 
 
+def clean_fund_name(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.endswith("-道乐数据"):
+        s = s[: -len("-道乐数据")].rstrip()
+    return s
+
+
 def load_invest_direction_map(detail_raw_json: Path) -> dict[str, str]:
     if not detail_raw_json.exists():
         return {}
@@ -72,15 +81,17 @@ def load_rows(workbook: Path, detail_raw_json: Path) -> tuple[list[dict[str, Any
             dt = pd.to_datetime(r.get("统计日期"), errors="coerce")
             if pd.isna(dt):
                 continue
+            company_name = r.get("基金公司名称")
             rows.append(
                 {
                     "date": dt.strftime("%Y-%m-%d"),
                     "board": board,
                     "type": str(r.get("基金范围") or ""),
-                    "fund_name": str(r.get("基金简称") or ""),
+                    "fund_name": clean_fund_name(r.get("基金简称")),
                     "fund_code": norm_code(r.get("基金代码")),
                     "invest_direction": invest_map.get(norm_code(r.get("基金代码")), ""),
                     "fund_category": str(r.get("基金类型") or ""),
+                    "company_name": "" if pd.isna(company_name) else str(company_name),
                     "rank": to_num(r.get("榜单名次")),
                     "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
                     "month_ret": norm_return_pct(r.get("近1月涨跌幅(%)")),
@@ -148,7 +159,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
       <select id=\"date\"></select>
       <select id=\"type\"></select>
       <select id=\"fund_type\"></select>
-      <input id=\"q\" placeholder=\"搜索指标/用途/动作\" />
+      <input id=\"q\" placeholder=\"搜索基金名称/代码/公司\" />
     </div>
     <div class=\"style-row\">
       <select id=\"theme_sel\">
@@ -166,6 +177,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
       <div class=\"tiny\">风格切换面板：只改视觉样式，不影响数据与计算。</div>
     </div>
     <div class=\"tiny\" id=\"note\"></div>
+    <div class=\"tiny\" id=\"scope_note\"></div>
     <div class=\"kpis\">
       <div class=\"kpi\"><div class=\"muted\">样本基金数</div><div id=\"k_n\" class=\"v\">-</div></div>
       <div class=\"kpi\"><div class=\"muted\">净偏好值(加-减)</div><div id=\"k_net\" class=\"v\">-</div></div>
@@ -196,6 +208,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
         <tr>
           <th>基金名称</th>
           <th>基金代码</th>
+          <th>基金公司</th>
           <th>投资方向</th>
           <th>类型</th>
           <th>近7日上榜次数</th>
@@ -226,6 +239,7 @@ const themeSel = document.getElementById('theme_sel');
 const tb = document.getElementById('tb');
 const tbFund = document.getElementById('tb_fund');
 const note = document.getElementById('note');
+const scope_note = document.getElementById('scope_note');
 const THEMES = {{
   org:       {{bg:'#f5f7fb',text:'#1f2937',card:'#ffffff',line:'#e5e7eb',muted:'#64748b',accent:'#111827',thead:'#f8fafc',soft:'#cbd5e1',tagbg:'#eef2ff',tagtext:'#3730a3'}},
   terminal:  {{bg:'#0b1220',text:'#dbeafe',card:'#111827',line:'#1f2937',muted:'#93c5fd',accent:'#22c55e',thead:'#0f172a',soft:'#1f2937',tagbg:'#052e16',tagtext:'#86efac'}},
@@ -256,7 +270,8 @@ function applyTheme(name) {{
 
 dateSel.innerHTML = dates.map(d => `<option value="${{d}}">${{d}}</option>`).join('');
 const types = [...new Set(DATA.map(r=>r.type).filter(Boolean))].sort();
-typeSel.innerHTML = '<option value="">全部类型</option>' + types.map(t=>`<option>${{t}}</option>`).join('');
+typeSel.innerHTML = types.map(t=>`<option>${{t}}</option>`).join('');
+if (types.includes("全部基金")) typeSel.value = "全部基金";
 const fts = [...new Set(DATA.map(r=>r.fund_category).filter(Boolean))].sort();
 fundTypeSel.innerHTML = '<option value="">全部基金类型</option>' + fts.map(t=>`<option>${{t}}</option>`).join('');
 
@@ -271,7 +286,7 @@ document.getElementById('tab_add').onclick = () => setMode('add');
 document.getElementById('tab_sub').onclick = () => setMode('sub');
 document.getElementById('tab_both').onclick = () => setMode('both');
 
-function buildAgg(modeX) {{
+function buildAgg(modeX, q) {{
   const endDate = dateSel.value || META.latest_date;
   const st = typeSel.value;
   const sft = fundTypeSel.value;
@@ -295,7 +310,7 @@ function buildAgg(modeX) {{
   for (const r of raw) {{
     const k = r.fund_code || r.fund_name;
     if (!k) continue;
-    if (!mp.has(k)) mp.set(k, {{name:r.fund_name||'', code:r.fund_code||'', invest_direction:r.invest_direction||'', type:r.type||'', d7:new Set(), d14:new Set(), d30:new Set(), dayByDate:{{}}, boardSeen:new Set(), latestMonth:null, latestDay:null, latestDate:''}});
+    if (!mp.has(k)) mp.set(k, {{name:r.fund_name||'', code:r.fund_code||'', company_name:r.company_name||'', invest_direction:r.invest_direction||'', type:r.type||'', d7:new Set(), d14:new Set(), d30:new Set(), dayByDate:{{}}, boardSeen:new Set(), latestMonth:null, latestDay:null, latestDate:''}});
     const o = mp.get(k);
     const dk = modeX==='both' ? `${{r.date}}|${{r.board}}` : r.date;
     if (w7.has(r.date)) o.d7.add(dk);
@@ -312,21 +327,23 @@ function buildAgg(modeX) {{
     if (modeX==='both' && o.boardSeen.size<2) continue;
     const d14 = [...w14].sort().flatMap(d => (o.dayByDate[d]||[]).slice(0,1));
     const d7 = [...w7].sort().flatMap(d => (o.dayByDate[d]||[]).slice(0,1));
-    out.push({{name:o.name, code:o.code, invest_direction:o.invest_direction||'', type:o.type||'', m7:o.d7.size, m14:o.d14.size, m30:o.d30.size, r7:d7.length?compound(d7):null, r14:d14.length?compound(d14):null, r30:o.latestMonth, r1:o.latestDay}});
+    out.push({{name:o.name, code:o.code, company_name:o.company_name||'', invest_direction:o.invest_direction||'', type:o.type||'', m7:o.d7.size, m14:o.d14.size, m30:o.d30.size, r7:d7.length?compound(d7):null, r14:d14.length?compound(d14):null, r30:o.latestMonth, r1:o.latestDay}});
   }}
-  return out;
+  if (!q) return out;
+  return out.filter(r => [r.name, r.code, r.company_name, r.invest_direction].join(' ').includes(q));
 }}
 
 function metricRows() {{
-  const rows = buildAgg(mode);
-  const addRows = buildAgg('add');
-  const subRows = buildAgg('sub');
+  const q = qInput.value.trim();
+  const rows = buildAgg(mode, q);
+  const addRows = buildAgg('add', q);
+  const subRows = buildAgg('sub', q);
 
   const a7 = rows.map(r=>r.m7), a14=rows.map(r=>r.m14), a30=rows.map(r=>r.m30);
   const lo7=Math.min(...a7,0), hi7=Math.max(...a7,0), lo14=Math.min(...a14,0), hi14=Math.max(...a14,0), lo30=Math.min(...a30,0), hi30=Math.max(...a30,0);
   const scoreAvg = avg(rows.map(r => 100*(0.5*mm(r.m7,lo7,hi7)+0.3*mm(r.m14,lo14,hi14)+0.2*mm(r.m30,lo30,hi30))));
 
-  const divWarn = buildAgg('both').filter(r=>r.m14>=8).length;
+  const divWarn = buildAgg('both', q).filter(r=>r.m14>=8).length;
   const net = addRows.length - subRows.length;
   const heat = avg(rows.map(r=>r.m7));
   const trend = avg(rows.map(r=>(r.m14+r.m30)/2));
@@ -352,7 +369,7 @@ function metricRows() {{
 
     {{c:'信号与预警', n:'短期热点标签占比', v:(100*rows.filter(r=>r.m7>=5 && r.m14<8).length/Math.max(rows.length,1)).toFixed(1)+'%', f:'近7日高且14/30未同步高', p:'识别新热点', a:'快速跟进内容'}},
     {{c:'信号与预警', n:'趋势延续标签占比', v:(100*rows.filter(r=>r.m14>=8 && r.m30>=12).length/Math.max(rows.length,1)).toFixed(1)+'%', f:'14日与30日都高', p:'识别稳定热度', a:'持续投放与专题化'}},
-    {{c:'信号与预警', n:'分歧预警标签占比', v:(100*buildAgg('both').filter(r=>r.m14>=8).length/Math.max(buildAgg('both').length,1)).toFixed(1)+'%', f:'双边活跃高', p:'识别高争议', a:'强化风险提示'}},
+    {{c:'信号与预警', n:'分歧预警标签占比', v:(100*buildAgg('both', q).filter(r=>r.m14>=8).length/Math.max(buildAgg('both', q).length,1)).toFixed(1)+'%', f:'双边活跃高', p:'识别高争议', a:'强化风险提示'}},
     {{c:'信号与预警', n:'退潮观察标签占比', v:(100*rows.filter(r=>r.m7+2<r.m14).length/Math.max(rows.length,1)).toFixed(1)+'%', f:'7日显著弱于14日', p:'识别退潮', a:'降权减少资源占用'}},
 
     {{c:'口径与时效', n:'样本基金数', v:String(rows.length), f:'当前筛选+当前视角基金数量', p:'评估统计稳定性', a:'样本过低时谨慎决策'}},
@@ -366,11 +383,11 @@ function render() {{
   document.getElementById('k_net').textContent = list.find(x=>x.n==='净偏好值（加-减）').v;
   document.getElementById('k_heat').textContent = list.find(x=>x.n==='短期热度（7日均值）').v;
   document.getElementById('k_div').textContent = list.find(x=>x.n==='分歧预警数').v;
-  note.textContent = `截至${{dateSel.value||META.latest_date}}，滚动统计7/14/30日（视角：${{mode==='add'?'加仓':mode==='sub'?'减仓':'双边'}}）`;
-
   const q = qInput.value.trim();
-  const rows = list.filter(x => !q || [x.c,x.n,x.f,x.p,x.a].join(' ').includes(q));
-  tb.innerHTML = rows.map(x => `<tr>
+  note.textContent = `截至${{dateSel.value||META.latest_date}}，滚动统计7/14/30日（视角：${{mode==='add'?'加仓':mode==='sub'?'减仓':'双边'}}）`;
+  scope_note.textContent = `当前口径：范围=${{typeSel.value||'全部基金'}}；基金类型=${{fundTypeSel.value||'全部'}}；检索=${{q||'无'}}`;
+
+  tb.innerHTML = list.map(x => `<tr>
     <td><span class="tag">${{x.c}}</span></td>
     <td><strong>${{x.n}}</strong></td>
     <td>${{x.v}}</td>
@@ -379,10 +396,11 @@ function render() {{
     <td class="muted">${{x.a}}</td>
   </tr>`).join('');
 
-  const funds = buildAgg(mode).sort((a,b)=> (n(b.m7)-n(a.m7)) || (n(b.m14)-n(a.m14)) || (n(b.m30)-n(a.m30)) || (a.code>b.code?1:-1));
+  const funds = buildAgg(mode, q).sort((a,b)=> (n(b.m7)-n(a.m7)) || (n(b.m14)-n(a.m14)) || (n(b.m30)-n(a.m30)) || (a.code>b.code?1:-1));
   tbFund.innerHTML = funds.slice(0, 120).map(r => `<tr>
     <td>${{r.name||''}}</td>
     <td>${{r.code||''}}</td>
+    <td>${{r.company_name||''}}</td>
     <td>${{r.invest_direction||''}}</td>
     <td>${{r.type||''}}</td>
     <td>${{r.m7}}</td>
