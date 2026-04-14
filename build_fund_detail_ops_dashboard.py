@@ -24,6 +24,12 @@ def normalize_percent(v: Any) -> float:
     return x * 100.0 if x <= 1.0 else x
 
 
+def safe_div(num: float, den: float) -> float:
+    if den <= 0:
+        return 0.0
+    return num / den
+
+
 def t(v: Any) -> str:
     if v is None:
         return ""
@@ -101,6 +107,17 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
 
     rows = []
     for _, r in merged.iterrows():
+        week_visit = n(r.get("本周浏览人数"))
+        week_search = n(r.get("本周搜索人数"))
+        optional_cnt = n(r.get("自选人数"))
+        hold_cnt = n(r.get("持有人数"))
+
+        # Recompute conversion ratios from base counts to avoid upstream ratio spikes.
+        ratio_search_exposure = safe_div(week_search, week_visit)
+        ratio_exposure_follow = safe_div(week_visit, optional_cnt)
+        ratio_exposure_conversion = safe_div(week_visit, hold_cnt)
+        ratio_follow_conversion = safe_div(optional_cnt, hold_cnt)
+
         rows.append(
             {
                 "基金代码": norm_code(r.get("基金代码")),
@@ -110,14 +127,14 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
                 "投资方向说明": t(r.get("投资方向说明")),
                 "榜单类型": t(r.get("榜单类型")),
                 "基金范围": t(r.get("基金范围")),
-                "本周浏览人数": n(r.get("本周浏览人数")),
+                "本周浏览人数": week_visit,
                 "本月浏览人数": n(r.get("本月浏览人数")),
-                "自选人数": n(r.get("自选人数")),
-                "持有人数": n(r.get("持有人数")),
-                "搜曝比": n(r.get("搜曝比")),
-                "曝关比": n(r.get("曝关比")),
-                "曝转比": n(r.get("曝转比")),
-                "关转比": n(r.get("关转比")),
+                "自选人数": optional_cnt,
+                "持有人数": hold_cnt,
+                "搜曝比": ratio_search_exposure,
+                "曝关比": ratio_exposure_follow,
+                "曝转比": ratio_exposure_conversion,
+                "关转比": ratio_follow_conversion,
                 "净曝关比": n(r.get("净曝关比")),
                 "近7天提及文章数": n(r.get("近7天提及文章数")),  # 平台聚合口径
                 "实抓近7天帖子数": n(r.get("实抓近7天帖子数")),  # 本次抓取样本口径
