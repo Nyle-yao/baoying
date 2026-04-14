@@ -27,6 +27,11 @@ def main() -> int:
     parser.add_argument("--browser-id", default="09cb220223cb45410e11e84679b83fb6")
     parser.add_argument("--date", help="Optional YYYY-MM-DD")
     parser.add_argument("--max-funds", type=int, default=None)
+    parser.add_argument(
+        "--skip-detail-crawl",
+        action="store_true",
+        help="Skip crawling fund detail pages (recommended for scheduled quick updates).",
+    )
     args = parser.parse_args()
 
     workbook = OUT / "加仓减仓分表版20260312_20260409.xlsx"
@@ -52,23 +57,26 @@ def main() -> int:
         cmd.extend(["--date", args.date])
     run(cmd)
 
-    cmd = [
-        "python3", str(BASE / "crawl_fund_detail_pages.py"),
-        "--namespace-name", args.namespace_name,
-        "--user-name", args.user_name,
-        "--password", args.password,
-        "--target", args.target,
-        "--browser-id", args.browser_id,
-        "--workbook", str(workbook),
-        "--output", str(detail_xlsx),
-        "--raw-json-output", str(detail_raw),
-        "--workers", "8",
-    ]
-    if args.date:
-        cmd.extend(["--date", args.date])
-    if args.max_funds:
-        cmd.extend(["--max-funds", str(args.max_funds)])
-    run(cmd)
+    if not args.skip_detail_crawl:
+        cmd = [
+            "python3", str(BASE / "crawl_fund_detail_pages.py"),
+            "--namespace-name", args.namespace_name,
+            "--user-name", args.user_name,
+            "--password", args.password,
+            "--target", args.target,
+            "--browser-id", args.browser_id,
+            "--workbook", str(workbook),
+            "--output", str(detail_xlsx),
+            "--raw-json-output", str(detail_raw),
+            "--workers", "8",
+        ]
+        if args.date:
+            cmd.extend(["--date", args.date])
+        if args.max_funds:
+            cmd.extend(["--max-funds", str(args.max_funds)])
+        run(cmd)
+    else:
+        print("skip_detail_crawl=true (scheduled quick update mode)")
 
     run([
         "python3", str(BASE / "build_core_dashboard_from_split.py"),
@@ -88,11 +96,14 @@ def main() -> int:
         "--output", str(comp_html),
         "--detail-raw-json", str(detail_raw),
     ])
-    run([
-        "python3", str(BASE / "build_fund_detail_ops_dashboard.py"),
-        "--input", str(detail_xlsx),
-        "--output", str(cockpit_html),
-    ])
+    if detail_xlsx.exists():
+        run([
+            "python3", str(BASE / "build_fund_detail_ops_dashboard.py"),
+            "--input", str(detail_xlsx),
+            "--output", str(cockpit_html),
+        ])
+    else:
+        print(f"warn_detail_xlsx_missing_skip_cockpit_build: {detail_xlsx}")
     run([
         "python3", str(BASE / "build_quickstart_guide.py"),
         "--output", str(quickstart_html),
