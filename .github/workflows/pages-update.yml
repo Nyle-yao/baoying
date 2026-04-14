@@ -37,6 +37,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pages.txt
 
+      - name: Notify Start (optional webhook)
+        if: ${{ always() && secrets.NOTIFY_WEBHOOK_URL != '' }}
+        env:
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+        run: |
+          MSG="【看板更新开始】event=${{ github.event_name }} run=${{ github.run_id }} sha=${{ github.sha }}"
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\":\"${MSG}\"}" "${NOTIFY_WEBHOOK_URL}" || true
+
       - name: Run full update pipeline
         env:
           TZ: Asia/Shanghai
@@ -55,6 +64,47 @@ jobs:
             --target "${CD_TARGET:-https://www.cdollar.cn/leshu-pro/#/e/vq6aKqp5YU}" \
             --browser-id "${CD_BROWSER_ID:-09cb220223cb45410e11e84679b83fb6}" \
             ${EXTRA_ARGS}
+
+      - name: Resolve Latest Date
+        id: latest
+        run: |
+          LATEST_DATE=$(python - <<'PY'
+from pathlib import Path
+import pandas as pd
+wb = Path("exports/addsub/加仓减仓分表版20260312_20260409.xlsx")
+raw = pd.read_excel(wb, sheet_name="Raw_Data")
+raw["统计日期"] = pd.to_datetime(raw["统计日期"], errors="coerce")
+latest = raw["统计日期"].max()
+print(latest.strftime("%Y-%m-%d"))
+PY
+          )
+          echo "latest_date=${LATEST_DATE}" >> "$GITHUB_OUTPUT"
+          echo "LATEST_DATE=${LATEST_DATE}" >> "$GITHUB_ENV"
+
+      - name: QA Gate 1 - Validate Pipeline
+        env:
+          CD_NAMESPACE_NAME: ${{ secrets.CD_NAMESPACE_NAME }}
+          CD_USER_NAME: ${{ secrets.CD_USER_NAME }}
+          CD_PASSWORD: ${{ secrets.CD_PASSWORD }}
+          CD_TARGET: ${{ secrets.CD_TARGET }}
+          CD_BROWSER_ID: ${{ secrets.CD_BROWSER_ID }}
+        run: |
+          python qa_validate_pipeline.py \
+            --workbook "exports/addsub/加仓减仓分表版20260312_20260409.xlsx" \
+            --namespace-name "${CD_NAMESPACE_NAME}" \
+            --user-name "${CD_USER_NAME}" \
+            --password "${CD_PASSWORD}" \
+            --target "${CD_TARGET:-https://www.cdollar.cn/leshu-pro/#/e/vq6aKqp5YU}" \
+            --browser-id "${CD_BROWSER_ID:-09cb220223cb45410e11e84679b83fb6}" \
+            --live-date "${LATEST_DATE}"
+
+      - name: QA Gate 2 - Strict End-to-End
+        run: |
+          python qa_strict_end_to_end.py \
+            --workbook "exports/addsub/加仓减仓分表版20260312_20260409.xlsx" \
+            --core-html "docs/index.html" \
+            --ops-html "docs/ops-metrics.html" \
+            --weak-html "docs/competitor-weakness.html"
 
       - name: Commit updated data and dashboards
         run: |
@@ -77,3 +127,23 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: QA/Deploy Summary
+        if: always()
+        run: |
+          {
+            echo "## 更新结果"
+            echo "- event: ${{ github.event_name }}"
+            echo "- latest_date: ${LATEST_DATE:-unknown}"
+            echo "- run_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "- result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Final (optional webhook)
+        if: always() && secrets.NOTIFY_WEBHOOK_URL != ''
+        env:
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+        run: |
+          MSG="【看板更新结束】result=${{ job.status }} date=${LATEST_DATE:-unknown} run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\":\"${MSG}\"}" "${NOTIFY_WEBHOOK_URL}" || true
