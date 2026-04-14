@@ -9,8 +9,9 @@ from datetime import datetime
 import pandas as pd
 
 
-DEFAULT_WORKBOOK = Path("/Users/yaoruanxingchen/c/exports/addsub/加仓减仓分表版20260312_20260409.xlsx")
-DEFAULT_WORKFLOW = Path("/Users/yaoruanxingchen/c/.github/workflows/pages-update.yml")
+BASE = Path(__file__).resolve().parent
+DEFAULT_WORKBOOK = BASE / "exports" / "addsub" / "加仓减仓分表版20260312_20260409.xlsx"
+DEFAULT_WORKFLOW = BASE / ".github" / "workflows" / "pages-update.yml"
 
 
 def parse_schedule_text(workflow_path: Path) -> str:
