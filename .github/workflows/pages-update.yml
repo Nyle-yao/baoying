@@ -37,6 +37,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pages.txt
 
+      - name: Notify start (WeChat/Email)
+        env:
+          WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_TO: ${{ secrets.SMTP_TO }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: |
+          python notify_update_status.py --event start
+
       - name: Run full update pipeline
         env:
           TZ: Asia/Shanghai
@@ -59,16 +71,7 @@ jobs:
       - name: Resolve Latest Date
         id: latest
         run: |
-          LATEST_DATE=$(python - <<'PY'
-from pathlib import Path
-import pandas as pd
-wb = Path("exports/addsub/加仓减仓分表版20260312_20260409.xlsx")
-raw = pd.read_excel(wb, sheet_name="Raw_Data")
-raw["统计日期"] = pd.to_datetime(raw["统计日期"], errors="coerce")
-latest = raw["统计日期"].max()
-print(latest.strftime("%Y-%m-%d"))
-PY
-          )
+          LATEST_DATE=$(python -c 'from pathlib import Path; import pandas as pd; wb = Path("exports/addsub/加仓减仓分表版20260312_20260409.xlsx"); raw = pd.read_excel(wb, sheet_name="Raw_Data"); raw["统计日期"] = pd.to_datetime(raw["统计日期"], errors="coerce"); latest = raw["统计日期"].max(); print(latest.strftime("%Y-%m-%d"))')
           echo "latest_date=${LATEST_DATE}" >> "$GITHUB_OUTPUT"
           echo "LATEST_DATE=${LATEST_DATE}" >> "$GITHUB_ENV"
 
@@ -118,6 +121,32 @@ PY
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Notify success (WeChat/Email)
+        if: ${{ success() }}
+        env:
+          WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_TO: ${{ secrets.SMTP_TO }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: |
+          python notify_update_status.py --event success --include-meta --extra "Pages: ${{ steps.deployment.outputs.page_url }}"
+
+      - name: Notify failure (WeChat/Email)
+        if: ${{ failure() }}
+        env:
+          WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_TO: ${{ secrets.SMTP_TO }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        run: |
+          python notify_update_status.py --event failure
 
       - name: QA/Deploy Summary
         if: ${{ always() }}
