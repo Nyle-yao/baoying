@@ -2,19 +2,9 @@ name: Update Dashboards And Deploy Pages
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ "main" ]
-    paths:
-      - ".github/workflows/pages-update.yml"
-      - "run_full_update_pipeline.py"
-      - "update_daily_append_and_dashboard.py"
-      - "build_*dashboard.py"
-      - "prepare_pages_bundle.py"
-      - "requirements-pages.txt"
-      - "docs/**"
-      - "exports/addsub/**"
   schedule:
-    - cron: "0 8 * * 1-5" # Asia/Shanghai 16:00, Mon-Fri
+    - cron: "30 2 * * 1-5" # Asia/Shanghai 10:30, Mon-Fri
+    - cron: "30 8 * * 1-5" # Asia/Shanghai 16:30, Mon-Fri
 
 permissions:
   contents: write
@@ -75,101 +65,11 @@ jobs:
             echo "No changes to commit"
           fi
 
-      - name: Preflight - detect/enable Pages
-        id: pages_preflight
-        env:
-          REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
-          GH_ADMIN_TOKEN: ${{ secrets.GH_PAGES_ADMIN_TOKEN }}
-        run: |
-          set -euo pipefail
-          API="https://api.github.com/repos/${REPO}/pages"
-          common_headers=(
-            -H "Accept: application/vnd.github+json"
-            -H "X-GitHub-Api-Version: 2022-11-28"
-          )
-
-          echo "Checking if Pages site exists..."
-          status="$(curl -sS -o /tmp/pages_get.json -w "%{http_code}" "${common_headers[@]}" -H "Authorization: Bearer ${GH_TOKEN}" "${API}")"
-          if [ "${status}" = "200" ]; then
-            echo "pages_enabled=true" >> "${GITHUB_OUTPUT}"
-            echo "Pages is already enabled."
-            exit 0
-          fi
-
-          echo "Pages check with GITHUB_TOKEN returned ${status}."
-          if [ -z "${GH_ADMIN_TOKEN:-}" ]; then
-            echo "::error::GitHub Pages 未启用，且未配置 GH_PAGES_ADMIN_TOKEN（需要 pages:write + administration:write）。请在仓库 Secrets 增加该 token 后重试。"
-            exit 1
-          fi
-
-          echo "Attempting to enable Pages via GH_PAGES_ADMIN_TOKEN..."
-          create_status="$(curl -sS -o /tmp/pages_create.json -w "%{http_code}" -X POST "${common_headers[@]}" -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" "${API}" -d '{"build_type":"workflow"}')"
-          if [ "${create_status}" != "201" ] && [ "${create_status}" != "409" ]; then
-            echo "::error::自动开启 Pages 失败，HTTP=${create_status}。GH_PAGES_ADMIN_TOKEN 需具备 pages:write + administration:write，且授权到该仓库。"
-            cat /tmp/pages_create.json || true
-            exit 1
-          fi
-
-          update_status="$(curl -sS -o /tmp/pages_update.json -w "%{http_code}" -X PUT "${common_headers[@]}" -H "Authorization: Bearer ${GH_ADMIN_TOKEN}" "${API}" -d '{"build_type":"workflow"}')"
-          if [ "${update_status}" != "200" ]; then
-            echo "::warning::更新 Pages build_type=workflow 返回 HTTP=${update_status}，继续尝试部署。"
-            cat /tmp/pages_update.json || true
-          fi
-
-          verify_status="$(curl -sS -o /tmp/pages_verify.json -w "%{http_code}" "${common_headers[@]}" -H "Authorization: Bearer ${GH_TOKEN}" "${API}")"
-          if [ "${verify_status}" != "200" ]; then
-            echo "::error::Pages 仍未就绪，HTTP=${verify_status}。"
-            cat /tmp/pages_verify.json || true
-            exit 1
-          fi
-          echo "pages_enabled=true" >> "${GITHUB_OUTPUT}"
-          echo "Pages enabled and verified."
-
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs
 
-      - name: Deploy to GitHub Pages (Attempt 1)
-        id: deployment_try1
-        continue-on-error: true
-        uses: actions/deploy-pages@v4
-
-      - name: Deploy to GitHub Pages (Attempt 2)
-        id: deployment_try2
-        if: steps.deployment_try1.outcome == 'failure'
-        continue-on-error: true
-        uses: actions/deploy-pages@v4
-
-      - name: Finalize deploy result
+      - name: Deploy to GitHub Pages
         id: deployment
-        if: always()
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.deployment_try1.outcome }}" = "success" ]; then
-            echo "page_url=${{ steps.deployment_try1.outputs.page_url }}" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-          if [ "${{ steps.deployment_try2.outcome }}" = "success" ]; then
-            echo "page_url=${{ steps.deployment_try2.outputs.page_url }}" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-          echo "::error::Pages 部署两次均失败。请检查仓库 Settings > Pages 是否已启用，并确认 Actions 具有 Pages 权限。"
-          exit 1
-
-      - name: Post-deploy health check
-        if: steps.deployment.outputs.page_url != ''
-        run: |
-          set -euo pipefail
-          URL="${{ steps.deployment.outputs.page_url }}"
-          echo "Checking ${URL}"
-          for i in 1 2 3 4 5; do
-            code="$(curl -sS -o /tmp/page_check.html -w "%{http_code}" "${URL}")"
-            if [ "${code}" = "200" ]; then
-              echo "Page healthy."
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "::warning::健康检查未返回 200，请稍后再访问。"
+        uses: actions/deploy-pages@v4

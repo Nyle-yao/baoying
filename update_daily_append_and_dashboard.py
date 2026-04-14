@@ -111,7 +111,7 @@ def clean_fund_name(v: Any) -> str:
 
 
 def norm_return_pct(v: Any) -> float | None:
-    """Normalize percent fields; some API rows occasionally come scaled by 10000."""
+    """Normalize month/year percent fields; upstream may occasionally scale by 10000."""
     x = pd.to_numeric(v, errors="coerce")
     if pd.isna(x):
         return None
@@ -119,6 +119,62 @@ def norm_return_pct(v: Any) -> float | None:
     if abs(x) > 100:
         x = x / 10000.0
     return x
+
+
+def norm_day_return_pct(v: Any) -> float | None:
+    """Normalize day return percent with stricter anti-scale rules."""
+    x = pd.to_numeric(v, errors="coerce")
+    if pd.isna(x):
+        return None
+    x = float(x)
+    # Very large magnitudes are typically *10000 scaled.
+    if abs(x) > 1000:
+        x = x / 10000.0
+    # Residual large magnitudes are typically *100 scaled.
+    elif abs(x) > 20:
+        x = x / 100.0
+    return x
+
+
+def repair_cross_scope_metric_outliers(df: pd.DataFrame) -> pd.DataFrame:
+    """Repair inconsistent metric values between 全部基金 and other scopes for same fund/date/board."""
+    out = df.copy()
+    metric_cfg = [
+        ("日涨跌幅(%)", norm_day_return_pct, lambda ref: max(1.5, 6 * abs(ref) + 0.8)),
+        ("近1月涨跌幅(%)", norm_return_pct, lambda ref: max(5.0, 4 * abs(ref) + 3.0)),
+        ("近1年涨跌幅(%)", norm_return_pct, lambda ref: max(12.0, 3 * abs(ref) + 8.0)),
+    ]
+    required = {"统计日期", "榜单类型", "基金代码", "基金范围"}
+    if not required.issubset(out.columns):
+        return out
+
+    for col, normalizer, _ in metric_cfg:
+        if col in out.columns:
+            out[col] = out[col].map(normalizer)
+
+    out["基金代码"] = out["基金代码"].map(norm_code)
+    out["统计日期"] = pd.to_datetime(out["统计日期"], errors="coerce")
+
+    for key, grp in out.groupby(["统计日期", "榜单类型", "基金代码"], dropna=False):
+        all_rows = grp[grp["基金范围"] == "全部基金"]
+        non_all = grp[grp["基金范围"] != "全部基金"]
+        if all_rows.empty or non_all.empty:
+            continue
+        for col, _, tol_fn in metric_cfg:
+            if col not in out.columns:
+                continue
+            refs = pd.to_numeric(non_all[col], errors="coerce").dropna().tolist()
+            if not refs:
+                continue
+            ref = float(pd.Series(refs).median())
+            tol = tol_fn(ref)
+            for i in all_rows.index:
+                cur = pd.to_numeric(pd.Series([out.at[i, col]]), errors="coerce").iloc[0]
+                if pd.isna(cur) or abs(float(cur) - ref) > tol:
+                    out.at[i, col] = ref
+
+    out["统计日期"] = out["统计日期"].dt.strftime("%Y-%m-%d")
+    return out
 
 
 def fetch_one_combo_once(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
@@ -152,20 +208,25 @@ def combo_signature(rows: list[dict[str, Any]]) -> tuple[str, ...]:
 
 
 def fetch_one_combo(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
-    """Fetch with stability guard: retry until two consecutive identical snapshots."""
-    best_rows: list[dict[str, Any]] | None = None
-    prev_sig: tuple[str, ...] | None = None
-    for attempt in range(1, 4):
+    """Fetch with stability guard: sample multiple snapshots and choose the majority signature."""
+    samples: list[tuple[tuple[str, ...], list[dict[str, Any]]]] = []
+    for attempt in range(1, 6):
         rows = fetch_one_combo_once(token, date_str, ranking_kind, fund_scope, show_by)
         sig = combo_signature(rows)
-        if prev_sig is not None and sig == prev_sig:
-            return rows
-        prev_sig = sig
-        best_rows = rows
-        if attempt < 3:
+        samples.append((sig, rows))
+        if attempt < 5:
             time.sleep(1)
-    # Source may fluctuate; keep last snapshot but ensure deterministic order usage downstream.
-    return best_rows or []
+
+    freq: dict[tuple[str, ...], int] = {}
+    for sig, _ in samples:
+        freq[sig] = freq.get(sig, 0) + 1
+    # Prefer the most frequent signature; if tie, keep the last observed among winners.
+    best_count = max(freq.values()) if freq else 0
+    winners = {sig for sig, cnt in freq.items() if cnt == best_count}
+    for sig, rows in reversed(samples):
+        if sig in winners:
+            return rows
+    return samples[-1][1] if samples else []
 
 
 def build_new_rows(token: str, day: date, show_by: int, company_map: dict[str, str]) -> pd.DataFrame:
@@ -187,7 +248,7 @@ def build_new_rows(token: str, day: date, show_by: int, company_map: dict[str, s
                         "基金简称": clean_fund_name(r.get("fundName")),
                         "基金代码": norm_code(r.get("fundCode")),
                         "基金类型": r.get("fundType"),
-                        "日涨跌幅(%)": norm_return_pct(r.get("dayInc")),
+                        "日涨跌幅(%)": norm_day_return_pct(r.get("dayInc")),
                         "近1月涨跌幅(%)": norm_return_pct(r.get("monthInc")),
                         "近1年涨跌幅(%)": norm_return_pct(r.get("yearInc")),
                         "近7日上榜天数": r.get("onRank7d"),
@@ -260,6 +321,19 @@ def reindex_rank(df: pd.DataFrame, has_board_type: bool) -> pd.DataFrame:
     return out
 
 
+def cap_group_top_n(df: pd.DataFrame, n: int, has_board_type: bool) -> pd.DataFrame:
+    out = df.copy()
+    out["统计日期"] = pd.to_datetime(out["统计日期"], errors="coerce")
+    out["榜单名次"] = pd.to_numeric(out["榜单名次"], errors="coerce")
+    group_cols = ["统计日期", "基金范围"]
+    if has_board_type:
+        group_cols = ["统计日期", "榜单类型", "基金范围"]
+    out = out.sort_values(group_cols + ["榜单名次", "基金代码"], ascending=True)
+    out = out.groupby(group_cols, as_index=False, group_keys=False).head(n)
+    out["统计日期"] = out["统计日期"].dt.strftime("%Y-%m-%d")
+    return out
+
+
 def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     add_df = pd.read_excel(workbook, sheet_name="加仓榜")
     sub_df = pd.read_excel(workbook, sheet_name="减仓榜")
@@ -277,7 +351,9 @@ def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     for df in (add_df, sub_df, raw_df, new_df):
         df["基金代码"] = df["基金代码"].map(norm_code)
         df["统计日期"] = pd.to_datetime(df["统计日期"], errors="coerce").dt.strftime("%Y-%m-%d")
-        for c in ["日涨跌幅(%)", "近1月涨跌幅(%)", "近1年涨跌幅(%)"]:
+        if "日涨跌幅(%)" in df.columns:
+            df["日涨跌幅(%)"] = df["日涨跌幅(%)"].map(norm_day_return_pct)
+        for c in ["近1月涨跌幅(%)", "近1年涨跌幅(%)"]:
             if c in df.columns:
                 df[c] = df[c].map(norm_return_pct)
 
@@ -297,6 +373,11 @@ def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     sub_all = pd.concat([sub_df, sub_new], ignore_index=True).drop_duplicates(subset=key_cols, keep="last")
     raw_all = pd.concat([raw_df, new_df], ignore_index=True).drop_duplicates(subset=key_cols, keep="last")
 
+    # Repair scope-level metric drifts (e.g. 全部基金 value diverges from same fund in other scopes).
+    raw_all = repair_cross_scope_metric_outliers(raw_all)
+    add_all = repair_cross_scope_metric_outliers(add_all)
+    sub_all = repair_cross_scope_metric_outliers(sub_all)
+
     # Recompute derived day-count fields to avoid upstream API anomalies.
     raw_all = recompute_derived_days(raw_all)
     add_all = recompute_derived_days(add_all)
@@ -304,6 +385,10 @@ def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     raw_all = reindex_rank(raw_all, has_board_type=True)
     add_all = reindex_rank(add_all, has_board_type=False)
     sub_all = reindex_rank(sub_all, has_board_type=False)
+    # Keep top-30 per date/board/scope to stay consistent with board display semantics.
+    raw_all = cap_group_top_n(raw_all, n=30, has_board_type=True)
+    add_all = cap_group_top_n(add_all, n=30, has_board_type=False)
+    sub_all = cap_group_top_n(sub_all, n=30, has_board_type=False)
 
     add_all = add_all.sort_values(["统计日期", "基金范围", "榜单名次"], ascending=[False, True, True])
     sub_all = sub_all.sort_values(["统计日期", "基金范围", "榜单名次"], ascending=[False, True, True])

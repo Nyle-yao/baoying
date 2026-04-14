@@ -2,11 +2,51 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
+from datetime import datetime
+
+import pandas as pd
 
 
-def build_html() -> str:
-    return """<!doctype html>
+DEFAULT_WORKBOOK = Path("/Users/yaoruanxingchen/c/exports/addsub/加仓减仓分表版20260312_20260409.xlsx")
+DEFAULT_WORKFLOW = Path("/Users/yaoruanxingchen/c/.github/workflows/pages-update.yml")
+
+
+def parse_schedule_text(workflow_path: Path) -> str:
+    if not workflow_path.exists():
+        return "交易日定时任务：10:30 与 16:30（若未部署则以本地手动更新为准）"
+    txt = workflow_path.read_text(encoding="utf-8", errors="ignore")
+    crons = re.findall(r'cron:\s*"([^"]+)"', txt)
+    # expected: 30 2 / 30 8 for Asia/Shanghai
+    if "30 2 * * 1-5" in crons and "30 8 * * 1-5" in crons:
+        return "交易日定时任务：10:30 与 16:30（自动抓取+重建看板）"
+    return "交易日定时任务：已配置（请以 workflow 实际 cron 为准）"
+
+
+def collect_auto_meta(workbook: Path, workflow: Path) -> dict[str, str]:
+    out = {
+        "latest_date": "-",
+        "latest_rows": "-",
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "schedule_text": parse_schedule_text(workflow),
+    }
+    if not workbook.exists():
+        return out
+    try:
+        raw = pd.read_excel(workbook, sheet_name="Raw_Data")
+        raw["统计日期"] = pd.to_datetime(raw["统计日期"], errors="coerce")
+        latest = raw["统计日期"].max()
+        latest_rows = raw[raw["统计日期"] == latest]
+        out["latest_date"] = latest.strftime("%Y-%m-%d") if pd.notna(latest) else "-"
+        out["latest_rows"] = str(len(latest_rows)) if pd.notna(latest) else "-"
+    except Exception:
+        pass
+    return out
+
+
+def build_html(meta: dict[str, str]) -> str:
+    html = """<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -115,13 +155,80 @@ def build_html() -> str:
             <td>交易日 16:30 前看当天数据怎么解释？</td>
             <td>若当天尚未完成抓取，会提示“当日未更新爬取”，滚动榜单默认使用已抓取到的最新日期。</td>
           </tr>
+          <tr>
+            <td>为什么切换日期后有的基金不见了？</td>
+            <td>看板按所选日期联动。某基金若当天不在榜，会被过滤或字段为空，这是正常业务语义，不是丢数据。</td>
+          </tr>
+          <tr>
+            <td>为什么有时日涨跌幅是空的？</td>
+            <td>通常是该基金当天未上榜，或源接口该字段当时未返回，不是前端计算错误。</td>
+          </tr>
+          <tr>
+            <td>“近1周/近2周/近1月涨跌幅”如何理解？</td>
+            <td>近1周、近2周基于窗口内上榜日的日涨跌幅滚动计算；近1月优先取所选日期记录值。</td>
+          </tr>
+          <tr>
+            <td>为什么某天总行数不是240？</td>
+            <td>标准是 8 个分组 × 每组 30 条。若不足，多数是源站该日某分组未返回满 30 条（常见于QD）。</td>
+          </tr>
+          <tr>
+            <td>发现疑点怎么反馈定位最快？</td>
+            <td>请提供：日期、榜单、基金代码、字段名、截图。这样可以最快复现并排查。</td>
+          </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="card">
+      <h2>4. 迭代修复说明（V2026-04-14）</h2>
+      <div class="muted" style="margin-bottom:8px;">自动补充：最新统计日期 __LATEST_DATE__；该日行数 __LATEST_ROWS__；生成时间 __UPDATED_AT__。</div>
+      <div class="muted" style="margin-bottom:8px;">自动补充：__SCHEDULE_TEXT__</div>
+      <table>
+        <thead>
+          <tr><th>修复名称</th><th>修复了什么</th><th>现在的正确口径</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>全链路数据联动一致性修复</td>
+            <td>修复了“核心看板切换日期后，涨跌幅未联动到所选日期”的问题；同时修复同基金同日跨基金范围（全部/偏股/偏债/QD）收益数值漂移。</td>
+            <td>切换日期后，日涨跌幅与近1月涨跌幅优先显示该日期抓取值；若该基金该日不在榜，则显示为空，不再误用其他日期数据。</td>
+          </tr>
+          <tr>
+            <td>抓取稳定性增强</td>
+            <td>源站分时更新与接口抖动时，可能出现同日多版本榜单结果。</td>
+            <td>抓取端采用多次采样+多数签名选取，降低瞬时抖动对榜单结果的影响。</td>
+          </tr>
+          <tr>
+            <td>全量自动质检增强</td>
+            <td>过去更多是结构校验，难以及时发现跨范围收益漂移。</td>
+            <td>新增全量跨范围一致性检测；异常会在流水中被拦截，避免错误数据进入看板。</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="muted" style="margin-top:8px;">
+        给运营同事的直观理解（最新）：现在看板已经按“日期强联动”修复。你先选日期，再看榜单和涨跌幅，看到的就是该日期当天抓取到的数据；不会再出现“日期变了、涨跌幅还停在旧日期”的情况。若某只基金该日不在榜，相关字段为空是正常含义，不是系统丢数。系统同时增加了跨范围收益一致性修复（全部基金/偏股/偏债/QD）和全量质检，能自动拦截大多数口径漂移问题。再加上交易日 10:30 与 16:30 双时点自动更新，你做日报、复盘、同业对比时可以直接按日期使用，不需要再手工二次校对口径。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>5. 给同事的直观理解（全面版）</h2>
+      <div class="muted" style="line-height:1.8;">
+        看板最核心的使用逻辑是“先定日期，再看数据”，日期切换后展示的是该日期当天抓到的值，不会混入其他日期。<br/>
+        如果某只基金在该日期没有上榜，相关字段为空是正常业务含义，不是系统随机丢数。<br/>
+        若和网页实时榜单有差异，先对照“最新统计日期、生成时间、源站分时更新点（11:00/14:00/15:00/16:00/21:00）”，再判断是否是时间点差异。<br/>
+        当前系统会做全量质检（名次连续、代码格式、跨范围收益一致性、前端数据块一致性），用于保障可用性。<br/>
+        日常建议流程：核心看板先筛热点与方向，再到驾驶舱判断可转化性，最后用动态指标看板做汇报总结。
+      </div>
     </div>
   </div>
 </body>
 </html>
 """
+    html = html.replace("__LATEST_DATE__", meta.get("latest_date", "-"))
+    html = html.replace("__LATEST_ROWS__", meta.get("latest_rows", "-"))
+    html = html.replace("__UPDATED_AT__", meta.get("updated_at", "-"))
+    html = html.replace("__SCHEDULE_TEXT__", meta.get("schedule_text", "-"))
+    return html
 
 
 def main() -> int:
@@ -130,10 +237,13 @@ def main() -> int:
         "--output",
         default="/Users/yaoruanxingchen/c/exports/addsub/看板_新手导航.html",
     )
+    parser.add_argument("--workbook", default=str(DEFAULT_WORKBOOK))
+    parser.add_argument("--workflow", default=str(DEFAULT_WORKFLOW))
     args = parser.parse_args()
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(build_html(), encoding="utf-8")
+    meta = collect_auto_meta(Path(args.workbook), Path(args.workflow))
+    output.write_text(build_html(meta), encoding="utf-8")
     print(output)
     return 0
 

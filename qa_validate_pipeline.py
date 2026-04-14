@@ -58,6 +58,29 @@ def validate_workbook(workbook: Path) -> tuple[pd.DataFrame, list[str]]:
         s = pd.to_numeric(raw[c], errors="coerce")
         check((s.isna() | (s.abs() <= 100)).all(), f"{c}范围正常", f"{c}存在绝对值>100的异常", issues)
 
+    # Cross-scope consistency check:
+    # same date + board + fund code should have close returns between 全部基金 and non-all scopes.
+    drift_bad = 0
+    for _, g in raw.groupby(["统计日期", "榜单类型", "基金代码"], dropna=False):
+        all_rows = g[g["基金范围"] == "全部基金"]
+        non_all = g[g["基金范围"] != "全部基金"]
+        if all_rows.empty or non_all.empty:
+            continue
+        for col, tol_base, tol_scale in [
+            ("日涨跌幅(%)", 1.5, 6.0),
+            ("近1月涨跌幅(%)", 5.0, 4.0),
+            ("近1年涨跌幅(%)", 12.0, 3.0),
+        ]:
+            base_vals = pd.to_numeric(non_all[col], errors="coerce").dropna()
+            if base_vals.empty:
+                continue
+            base = float(base_vals.median())
+            tol = max(tol_base, tol_scale * abs(base) + (0.8 if col == "日涨跌幅(%)" else 3.0))
+            for v in pd.to_numeric(all_rows[col], errors="coerce").dropna().tolist():
+                if abs(float(v) - base) > tol:
+                    drift_bad += 1
+    check(drift_bad == 0, "跨基金范围收益口径一致", f"发现 {drift_bad} 条跨基金范围收益漂移", issues)
+
     s7 = pd.to_numeric(raw["近7日上榜天数"], errors="coerce")
     sc = pd.to_numeric(raw["连续上榜天数"], errors="coerce")
     check(((s7 >= 0) & (s7 <= 7)).fillna(False).all(), "近7日上榜天数在0-7", "近7日上榜天数存在异常", issues)

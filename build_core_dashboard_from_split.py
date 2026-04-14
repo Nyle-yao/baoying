@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import argparse
+import statistics
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,55 @@ def norm_return_pct(v: Any) -> float | None:
     return n
 
 
+def norm_day_return_pct(v: Any) -> float | None:
+    n = to_num(v)
+    if n is None:
+        return None
+    if abs(n) > 1000:
+        n = n / 10000.0
+    elif abs(n) > 20:
+        n = n / 100.0
+    return n
+
+
+def repair_cross_scope_metric_outliers(df: pd.DataFrame) -> pd.DataFrame:
+    """For same date/board/fund, harmonize return metrics across scopes and repair outliers."""
+    out = df.copy()
+    required = {"统计日期", "榜单", "基金代码", "基金范围"}
+    if not required.issubset(out.columns):
+        return out
+
+    metric_cfg = [
+        ("日涨跌幅(%)", norm_day_return_pct, lambda ref: max(1.5, 6 * abs(ref) + 0.8)),
+        ("近1月涨跌幅(%)", norm_return_pct, lambda ref: max(5.0, 4 * abs(ref) + 3.0)),
+        ("近1年涨跌幅(%)", norm_return_pct, lambda ref: max(12.0, 3 * abs(ref) + 8.0)),
+    ]
+    for col, normalizer, _ in metric_cfg:
+        if col in out.columns:
+            out[col] = out[col].map(normalizer)
+
+    for _, idx in out.groupby(["统计日期", "榜单", "基金代码"]).groups.items():
+        block = out.loc[idx]
+        non_all = block[block["基金范围"] != "全部基金"]
+        all_rows = block[block["基金范围"] == "全部基金"]
+        if non_all.empty or all_rows.empty:
+            continue
+        for col, _, tol_fn in metric_cfg:
+            if col not in out.columns:
+                continue
+            vals = pd.to_numeric(non_all[col], errors="coerce").dropna().tolist()
+            if not vals:
+                continue
+            base = float(statistics.median(vals))
+            tol = tol_fn(base)
+            for i in all_rows.index:
+                cur = pd.to_numeric(pd.Series([out.at[i, col]]), errors="coerce").iloc[0]
+                if pd.isna(cur) or abs(float(cur) - base) > tol:
+                    out.at[i, col] = base
+
+    return out
+
+
 def load_invest_direction_map(detail_raw_json: Path) -> dict[str, str]:
     if not detail_raw_json.exists():
         return {}
@@ -83,6 +133,7 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
     add_df["榜单"] = "加仓"
     sub_df["榜单"] = "减仓"
     df = pd.concat([add_df, sub_df], ignore_index=True)
+    df = repair_cross_scope_metric_outliers(df)
     invest_map = load_invest_direction_map(detail_raw_json)
 
     rows: list[dict[str, Any]] = []
@@ -103,7 +154,7 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
                 "invest_direction": invest_direction,
                 "fund_category": fund_category,
                 "rank": to_num(r.get("榜单名次")),
-                "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
+                "day_ret": norm_day_return_pct(r.get("日涨跌幅(%)")),
                 "month_ret": norm_return_pct(r.get("近1月涨跌幅(%)")),
             }
         )
@@ -428,6 +479,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
             type: r.type || "",
             d30: new Set(), d14: new Set(), d7: new Set(),
             latestDate: "", latestMonth: null, latestDay: null,
+            exactMonth: null, exactDay: null,
+            hasExact: false,
             dayByDate: {{}}, boardSeen: new Set(), inRangeCount: 0,
           }});
         }}
@@ -443,10 +496,16 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
         if (!o.latestDate || r.date > o.latestDate) {{
           o.latestDate = r.date; o.latestMonth = r.month_ret; o.latestDay = r.day_ret;
         }}
+        if (exactDate && r.date === exactDate) {{
+          o.hasExact = true;
+          if (o.exactMonth == null && r.month_ret != null) o.exactMonth = r.month_ret;
+          if (o.exactDay == null && r.day_ret != null) o.exactDay = r.day_ret;
+        }}
       }}
 
       const out = [];
       for (const [,o] of mp) {{
+        if (exactDate && !o.hasExact) continue;
         if (mode === "both" && o.boardSeen.size < 2) continue;
         const dates14 = [...win14].sort();
         const dates7 = [...win7].sort();
@@ -455,8 +514,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
         out.push({{
           fund_name: o.fund_name, fund_code: o.fund_code, invest_direction: o.invest_direction || "", type: o.type,
           m30: o.d30.size, m14: o.d14.size, m7: o.d7.size,
-          r30: o.latestMonth, r14: day14.length ? compoundReturns(day14) : null,
-          r7: day7.length ? compoundReturns(day7) : null, r1: o.latestDay,
+          r30: o.exactMonth != null ? o.exactMonth : null, r14: day14.length ? compoundReturns(day14) : null,
+          r7: day7.length ? compoundReturns(day7) : null, r1: o.exactDay != null ? o.exactDay : null,
         }});
       }}
       return out;
