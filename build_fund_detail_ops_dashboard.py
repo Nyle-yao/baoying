@@ -30,6 +30,14 @@ def safe_div(num: float, den: float) -> float:
     return num / den
 
 
+def clamp(v: float, lo: float, hi: float) -> float:
+    if v < lo:
+        return lo
+    if v > hi:
+        return hi
+    return v
+
+
 def t(v: Any) -> str:
     if v is None:
         return ""
@@ -112,11 +120,12 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
         optional_cnt = n(r.get("自选人数"))
         hold_cnt = n(r.get("持有人数"))
 
-        # Recompute conversion ratios from base counts to avoid upstream ratio spikes.
-        ratio_search_exposure = safe_div(week_search, week_visit)
-        ratio_exposure_follow = safe_div(week_visit, optional_cnt)
-        ratio_exposure_conversion = safe_div(week_visit, hold_cnt)
-        ratio_follow_conversion = safe_div(optional_cnt, hold_cnt)
+        # Recompute conversion ratios from base counts, then clamp to business-safe bounds.
+        # These bounds prevent a few tiny-denominator records from dominating the dashboard.
+        ratio_search_exposure = clamp(safe_div(week_search, week_visit), 0.0, 0.5)
+        ratio_exposure_follow = clamp(safe_div(week_visit, optional_cnt), 0.0, 2.0)
+        ratio_exposure_conversion = clamp(safe_div(week_visit, hold_cnt), 0.0, 7.0)
+        ratio_follow_conversion = clamp(safe_div(optional_cnt, hold_cnt), 0.0, 20.0)
 
         rows.append(
             {
