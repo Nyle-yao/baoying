@@ -189,6 +189,9 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
     .area {{ max-height:460px; overflow:auto; border:1px solid var(--line); border-radius:10px; }}
     .muted {{ color:var(--muted); }}
     .tag {{ display:inline-block; border:1px solid var(--soft); background:var(--tagbg); color:var(--tagtext); border-radius:999px; padding:2px 8px; font-size:12px; }}
+    .legend {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }}
+    .legend-item {{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:3px 8px; background:var(--card); }}
+    .legend-dot {{ width:10px; height:10px; border-radius:50%; display:inline-block; }}
     @media (max-width: 1200px) {{ .grid2,.grid2b {{ grid-template-columns:1fr; }} .filters {{ grid-template-columns:1fr; }} .kpis {{ grid-template-columns:repeat(2,1fr); }} }}
   </style>
 </head>
@@ -248,6 +251,7 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
     <div class="card">
       <div class="box-title">主视图：浏览热度 vs 关转比（气泡=自选人数，颜色=投资方向）</div>
       <svg id="scatter" class="chart"></svg>
+      <div id="dir_legend" class="legend"></div>
     </div>
     <div class="card">
       <div class="box-title">运营Top榜</div>
@@ -389,6 +393,19 @@ function colorByDirection(name) {{
   return palette[idx % palette.length];
 }}
 
+function renderLegend(rows) {{
+  const host = byId("dir_legend");
+  const uniq = new Set(rows.map(r => (r["投资方向标签"] || "未分类")));
+  const ordered = (META.direction_list || []).filter(x => uniq.has(x));
+  for (const x of uniq) {{
+    if (!ordered.includes(x)) ordered.push(x);
+  }}
+  host.innerHTML = ordered.map(x => {{
+    const col = colorByDirection(x);
+    return `<span class="legend-item"><span class="legend-dot" style="background:${{col}};border:1px solid ${{col}};"></span>${{x}}</span>`;
+  }}).join("");
+}}
+
 function renderScatter(rows) {{
   const svg = byId("scatter");
   const W = svg.clientWidth || 800, H = svg.clientHeight || 420;
@@ -474,6 +491,7 @@ function render() {{
   byId("scope_note").textContent = `当前口径：快照=${{META.snapshot || '-'}}；榜单=${{byId("board").value || "全部"}}；投资方向=${{dirSel.value || "全部"}}；检索=${{(byId("q").value||'').trim() || "无"}}；动态样本截止=${{META.note_latest_time || "-"}}`;
   renderKPI(rows);
   renderScatter(rows);
+  renderLegend(rows);
   topList(rows, "关转比", "top_ctr", r => `｜关转比 ${{fmt(n(r["关转比"]))}}`);
   topList(rows, "曝关比", "top_exp", r => `｜曝关比 ${{fmt(n(r["曝关比"]))}}`);
   topList(rows, "近7天提及文章数", "top_note", r => `｜近7天提及(平台) ${{Math.round(n(r["近7天提及文章数"]))}}`);
