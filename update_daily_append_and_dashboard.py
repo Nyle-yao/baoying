@@ -265,6 +265,15 @@ def append_and_save(workbook: Path, new_df: pd.DataFrame) -> None:
     sub_df = pd.read_excel(workbook, sheet_name="减仓榜")
     raw_df = pd.read_excel(workbook, sheet_name="Raw_Data")
 
+    required_cols = {"统计日期", "榜单类型", "基金范围", "基金代码"}
+    if new_df is None or new_df.empty:
+        print("warn_no_new_rows_skip_append")
+        return
+    if not required_cols.issubset(set(new_df.columns)):
+        missing = sorted(required_cols.difference(set(new_df.columns)))
+        print(f"warn_missing_required_columns_skip_append missing={','.join(missing)}")
+        return
+
     for df in (add_df, sub_df, raw_df, new_df):
         df["基金代码"] = df["基金代码"].map(norm_code)
         df["统计日期"] = pd.to_datetime(df["统计日期"], errors="coerce").dt.strftime("%Y-%m-%d")
