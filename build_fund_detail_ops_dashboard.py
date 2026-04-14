@@ -17,6 +17,13 @@ def n(v: Any) -> float:
     return float(x)
 
 
+def normalize_percent(v: Any) -> float:
+    x = n(v)
+    if x <= 0:
+        return 0.0
+    return x * 100.0 if x <= 1.0 else x
+
+
 def t(v: Any) -> str:
     if v is None:
         return ""
@@ -45,6 +52,11 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
     notes["发布时间"] = pd.to_datetime(notes["发布时间"], errors="coerce")
     notes["日"] = notes["发布时间"].dt.strftime("%Y-%m-%d")
     notes["互动总量"] = notes["点赞数"].map(n) + notes["评论数"].map(n)
+    notes["有效互动率_百分比"] = notes["有效互动率(%)"].map(normalize_percent)
+    latest_note_time = notes["发布时间"].dropna().max() if "发布时间" in notes.columns else pd.NaT
+    notes_7d = notes.copy()
+    if pd.notna(latest_note_time):
+        notes_7d = notes[notes["发布时间"] >= latest_note_time - pd.Timedelta(days=7)]
 
     note_agg = (
         notes.groupby("基金代码", dropna=False)
@@ -54,7 +66,15 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
             笔记评论总量=("评论数", "sum"),
             笔记互动总量=("互动总量", "sum"),
             笔记条数_实抓=("帖子ID", "count"),
-            笔记平均互动率=("有效互动率(%)", "mean"),
+            笔记平均互动率=("有效互动率_百分比", "mean"),
+        )
+        .reset_index()
+    )
+    note_agg_7d = (
+        notes_7d.groupby("基金代码", dropna=False)
+        .agg(
+            实抓近7天帖子数=("帖子ID", "count"),
+            实抓近7天互动总量=("互动总量", "sum"),
         )
         .reset_index()
     )
@@ -65,8 +85,17 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
         .sort_values("日")
     )
 
-    merged = core.merge(note_agg, on="基金代码", how="left")
-    for c in ["笔记浏览总量", "笔记点赞总量", "笔记评论总量", "笔记互动总量", "笔记条数_实抓", "笔记平均互动率"]:
+    merged = core.merge(note_agg, on="基金代码", how="left").merge(note_agg_7d, on="基金代码", how="left")
+    for c in [
+        "笔记浏览总量",
+        "笔记点赞总量",
+        "笔记评论总量",
+        "笔记互动总量",
+        "笔记条数_实抓",
+        "笔记平均互动率",
+        "实抓近7天帖子数",
+        "实抓近7天互动总量",
+    ]:
         if c in merged.columns:
             merged[c] = merged[c].fillna(0)
 
@@ -90,7 +119,8 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
                 "曝转比": n(r.get("曝转比")),
                 "关转比": n(r.get("关转比")),
                 "净曝关比": n(r.get("净曝关比")),
-                "近7天提及文章数": n(r.get("近7天提及文章数")),
+                "近7天提及文章数": n(r.get("近7天提及文章数")),  # 平台聚合口径
+                "实抓近7天帖子数": n(r.get("实抓近7天帖子数")),  # 本次抓取样本口径
                 "动态笔记条数": n(r.get("动态笔记条数")),
                 "笔记浏览总量": n(r.get("笔记浏览总量")),
                 "笔记点赞总量": n(r.get("笔记点赞总量")),
@@ -114,6 +144,7 @@ def load_data(xlsx: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
         "fund_count": len(rows),
         "direction_list": sorted({r["投资方向标签"] for r in rows if r["投资方向标签"]}),
         "trend": day_trend.to_dict(orient="records"),
+        "note_latest_time": latest_note_time.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(latest_note_time) else "",
     }
     return rows, notes.to_dict(orient="records"), meta
 
@@ -142,7 +173,7 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
     .filters {{ display:grid; grid-template-columns: 220px 240px 300px; gap:8px; margin-top:10px; }}
     select,input {{ width:100%; border:1px solid var(--soft); border-radius:8px; padding:8px; font-size:13px; background:var(--card); color:var(--text); }}
     .style-row {{ display:grid; grid-template-columns:220px 1fr; gap:8px; margin-top:8px; }}
-    .kpis {{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:10px; }}
+    .kpis {{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-top:10px; }}
     .kpi {{ background:var(--thead); border:1px solid var(--line); border-radius:10px; padding:10px; }}
     .kpi .k {{ color:var(--muted); font-size:12px; }}
     .kpi .v {{ font-size:24px; font-weight:700; margin-top:4px; }}
@@ -206,7 +237,8 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
     </div>
     <div class="kpis">
       <div class="kpi"><div class="k">样本基金数</div><div class="v" id="k_count">-</div></div>
-      <div class="kpi"><div class="k">近7天提及文章总数</div><div class="v" id="k_mention">-</div></div>
+      <div class="kpi"><div class="k">近7天提及总数（平台）</div><div class="v" id="k_mention">-</div></div>
+      <div class="kpi"><div class="k">近7天提及总数（实抓）</div><div class="v" id="k_mention_cap">-</div></div>
       <div class="kpi"><div class="k">动态总互动量（赞+评）</div><div class="v" id="k_interact">-</div></div>
       <div class="kpi"><div class="k">高关注基金数（自选P75）</div><div class="v" id="k_focus">-</div></div>
     </div>
@@ -230,8 +262,10 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
         </div>
       </div>
       <div style="margin-top:8px;">
-        <div class="tag">按近7天提及文章数 Top10</div>
+        <div class="tag">按近7天提及文章数（平台）Top10</div>
         <ol id="top_note" class="list"></ol>
+        <div class="tag" style="margin-top:8px;">按近7天提及文章数（实抓）Top10</div>
+        <ol id="top_note_cap" class="list"></ol>
       </div>
     </div>
   </div>
@@ -243,7 +277,7 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
         <table>
           <thead>
             <tr>
-              <th>基金名称</th><th>基金代码</th><th>投资方向</th><th>本周浏览</th><th>自选</th><th>持有</th><th>曝关比</th><th>关转比</th><th>提及文章(7天)</th><th>笔记互动总量</th><th>笔记平均互动率(%)</th>
+              <th>基金名称</th><th>基金代码</th><th>投资方向</th><th>本周浏览</th><th>自选</th><th>持有</th><th>曝关比</th><th>关转比</th><th>提及文章(7天,平台)</th><th>提及文章(7天,实抓)</th><th>笔记互动总量</th><th>笔记平均互动率(%)</th>
             </tr>
           </thead>
           <tbody id="tb_a"></tbody>
@@ -342,6 +376,7 @@ function percentile(arr, p) {{
 function renderKPI(rows) {{
   byId("k_count").textContent = rows.length;
   byId("k_mention").textContent = Math.round(rows.reduce((s,r)=>s+n(r["近7天提及文章数"]),0));
+  byId("k_mention_cap").textContent = Math.round(rows.reduce((s,r)=>s+n(r["实抓近7天帖子数"]),0));
   byId("k_interact").textContent = Math.round(rows.reduce((s,r)=>s+n(r["笔记互动总量"]),0));
   const p75 = percentile(rows.map(r=>n(r["自选人数"])), 0.75);
   byId("k_focus").textContent = rows.filter(r=>n(r["自选人数"])>=p75 && p75>0).length;
@@ -390,7 +425,7 @@ function renderTableA(rows) {{
     <td>${{r["基金名称"]||""}}</td><td>${{r["基金代码"]||""}}</td><td>${{r["投资方向标签"]||""}}</td>
     <td>${{Math.round(n(r["本周浏览人数"]))}}</td><td>${{Math.round(n(r["自选人数"]))}}</td><td>${{Math.round(n(r["持有人数"]))}}</td>
     <td>${{fmt(n(r["曝关比"]))}}</td><td>${{fmt(n(r["关转比"]))}}</td>
-    <td>${{Math.round(n(r["近7天提及文章数"]))}}</td><td>${{Math.round(n(r["笔记互动总量"]))}}</td><td>${{fmt(n(r["笔记平均互动率"]))}}</td>
+    <td>${{Math.round(n(r["近7天提及文章数"]))}}</td><td>${{Math.round(n(r["实抓近7天帖子数"]))}}</td><td>${{Math.round(n(r["笔记互动总量"]))}}</td><td>${{fmt(n(r["笔记平均互动率"]))}}</td>
   </tr>`).join("");
 }}
 
@@ -436,12 +471,13 @@ function renderTableB(rows) {{
 
 function render() {{
   const rows = filtered();
-  byId("scope_note").textContent = `当前口径：快照=${{META.snapshot || '-'}}；榜单=${{byId("board").value || "全部"}}；投资方向=${{dirSel.value || "全部"}}；检索=${{(byId("q").value||'').trim() || "无"}}`;
+  byId("scope_note").textContent = `当前口径：快照=${{META.snapshot || '-'}}；榜单=${{byId("board").value || "全部"}}；投资方向=${{dirSel.value || "全部"}}；检索=${{(byId("q").value||'').trim() || "无"}}；动态样本截止=${{META.note_latest_time || "-"}}`;
   renderKPI(rows);
   renderScatter(rows);
   topList(rows, "关转比", "top_ctr", r => `｜关转比 ${{fmt(n(r["关转比"]))}}`);
   topList(rows, "曝关比", "top_exp", r => `｜曝关比 ${{fmt(n(r["曝关比"]))}}`);
-  topList(rows, "近7天提及文章数", "top_note", r => `｜近7天提及文章数 ${{Math.round(n(r["近7天提及文章数"]))}}`);
+  topList(rows, "近7天提及文章数", "top_note", r => `｜近7天提及(平台) ${{Math.round(n(r["近7天提及文章数"]))}}`);
+  topList(rows, "实抓近7天帖子数", "top_note_cap", r => `｜近7天提及(实抓) ${{Math.round(n(r["实抓近7天帖子数"]))}}`);
   renderTableA(rows);
   renderTrend();
   renderTableB(rows);
