@@ -46,13 +46,8 @@ jobs:
           CD_TARGET: ${{ secrets.CD_TARGET }}
           CD_BROWSER_ID: ${{ secrets.CD_BROWSER_ID }}
         run: |
-          EXTRA_ARGS=""
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            EXTRA_ARGS="--skip-detail-crawl --max-funds 120"
-            echo "Scheduled run: using quick update mode"
-          else
-            echo "Manual run: using full update mode"
-          fi
+          EXTRA_ARGS="--skip-detail-crawl --max-funds 120"
+          echo "Using quick update mode for both scheduled and manual runs"
           python run_full_update_pipeline.py \
             --namespace-name "${CD_NAMESPACE_NAME}" \
             --user-name "${CD_USER_NAME}" \
