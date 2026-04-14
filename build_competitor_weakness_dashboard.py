@@ -41,6 +41,15 @@ def norm_code(v: Any) -> str:
     return s.zfill(6) if s.isdigit() else s
 
 
+def clean_fund_name(v: Any) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.endswith("-道乐数据"):
+        s = s[: -len("-道乐数据")].rstrip()
+    return s
+
+
 def load_invest_direction_map(detail_raw_json: Path) -> dict[str, str]:
     if not detail_raw_json.exists():
         return {}
@@ -54,8 +63,10 @@ def load_invest_direction_map(detail_raw_json: Path) -> dict[str, str]:
         responses = item.get("responses") or {}
         follow_data = (responses.get("userFollowData") or {}).get("data") or {}
         invest_direction = (
-            str(follow_data.get("fundTypeFirst") or "").strip()
+            str(item.get("investment") or "").strip()
+            or str(item.get("investDirection") or "").strip()
             or str(follow_data.get("gfFundTypeFirst") or "").strip()
+            or str(follow_data.get("fundTypeFirst") or "").strip()
             or str(follow_data.get("fundTypeName") or "").strip()
         )
         if fund_code:
@@ -70,15 +81,19 @@ def read_sheet(path: Path, sheet: str, board: str, invest_map: dict[str, str]) -
         dt = pd.to_datetime(r.get("统计日期"), errors="coerce")
         if pd.isna(dt):
             continue
+        fund_code = norm_code(r.get("基金代码"))
+        fund_category = str(r.get("基金类型") or "").strip()
+        fund_scope = str(r.get("基金范围") or "").strip()
+        invest_direction = invest_map.get(fund_code, "").strip() or fund_category or fund_scope or "未知"
         out.append(
             {
                 "date": dt.strftime("%Y-%m-%d"),
                 "board": board,
-                "type": str(r.get("基金范围") or ""),
-                "fund_name": str(r.get("基金简称") or ""),
-                "fund_code": norm_code(r.get("基金代码")),
-                "invest_direction": invest_map.get(norm_code(r.get("基金代码")), ""),
-                "fund_category": str(r.get("基金类型") or ""),
+                "type": fund_scope,
+                "fund_name": clean_fund_name(r.get("基金简称")),
+                "fund_code": fund_code,
+                "invest_direction": invest_direction,
+                "fund_category": fund_category,
                 "company_name": str(r.get("基金公司名称") or ""),
                 "rank": to_num(r.get("榜单名次")),
                 "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
@@ -155,6 +170,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
       <a href=\"/ops-metrics\">动态指标看板</a>
       <a class=\"on\" href=\"/competitor-weakness\">竞品弱点看板</a>
       <a href=\"/metrics-doc\">指标文档</a>
+      <a href=\"/quickstart\">新手导航</a>
     </div>
     <div class=\"page-desc\">这张表用来找“对手基金哪里在变弱”，方便你挑出最值得优先突破的目标。</div>
     <div class=\"tabs\">
@@ -284,7 +300,8 @@ const dates = [...new Set(DATA.map(r=>r.date).filter(Boolean))].sort((a,b)=>a>b?
 dateSel.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
 
 const types = [...new Set(DATA.map(r=>r.type).filter(Boolean))].sort();
-typeSel.innerHTML = '<option value="">全部类型</option>' + types.map(t=>`<option>${t}</option>`).join('');
+typeSel.innerHTML = types.map(t=>`<option>${t}</option>`).join('');
+if (types.includes("全部基金")) typeSel.value = "全部基金";
 
 const ftypes = [...new Set(DATA.map(r=>r.fund_category).filter(Boolean))].sort();
 fundTypeSel.innerHTML = '<option value="">全部基金类型</option>' + ftypes.map(t=>`<option>${t}</option>`).join('');

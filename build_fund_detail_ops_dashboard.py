@@ -177,6 +177,7 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
       <a href="/ops-metrics">动态指标看板</a>
       <a href="/competitor-weakness">竞品弱点看板</a>
       <a href="/metrics-doc">指标文档</a>
+      <a href="/quickstart">新手导航</a>
     </div>
     <div class="filters">
       <select id="direction"></select>

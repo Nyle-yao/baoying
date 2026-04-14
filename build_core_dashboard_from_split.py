@@ -66,8 +66,10 @@ def load_invest_direction_map(detail_raw_json: Path) -> dict[str, str]:
         responses = item.get("responses") or {}
         follow_data = (responses.get("userFollowData") or {}).get("data") or {}
         invest_direction = (
-            str(follow_data.get("fundTypeFirst") or "").strip()
+            str(item.get("investment") or "").strip()
+            or str(item.get("investDirection") or "").strip()
             or str(follow_data.get("gfFundTypeFirst") or "").strip()
+            or str(follow_data.get("fundTypeFirst") or "").strip()
             or str(follow_data.get("fundTypeName") or "").strip()
         )
         if fund_code:
@@ -85,17 +87,21 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
 
     rows: list[dict[str, Any]] = []
     for _, r in df.iterrows():
+        fund_code = norm_code(r.get("基金代码"))
+        fund_category = str(r.get("基金类型") or "").strip()
+        fund_scope = str(r.get("基金范围") or "").strip()
+        invest_direction = invest_map.get(fund_code, "").strip() or fund_category or fund_scope or "未知"
         rows.append(
             {
                 "date": pd.to_datetime(r.get("统计日期"), errors="coerce").strftime("%Y-%m-%d")
                 if not pd.isna(pd.to_datetime(r.get("统计日期"), errors="coerce"))
                 else "",
                 "board": str(r.get("榜单") or ""),
-                "type": str(r.get("基金范围") or ""),  # UI displays as 类型 per new naming rule
+                "type": fund_scope,  # UI displays as 类型 per new naming rule
                 "fund_name": clean_fund_name(r.get("基金简称")),
-                "fund_code": norm_code(r.get("基金代码")),
-                "invest_direction": invest_map.get(norm_code(r.get("基金代码")), ""),
-                "fund_category": str(r.get("基金类型") or ""),
+                "fund_code": fund_code,
+                "invest_direction": invest_direction,
+                "fund_category": fund_category,
                 "rank": to_num(r.get("榜单名次")),
                 "day_ret": norm_return_pct(r.get("日涨跌幅(%)")),
                 "month_ret": norm_return_pct(r.get("近1月涨跌幅(%)")),
@@ -164,6 +170,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
         <a href="/ops-metrics">动态指标看板</a>
         <a href="/competitor-weakness">竞品弱点看板</a>
         <a href="/metrics-doc">指标文档</a>
+        <a href="/quickstart">新手导航</a>
       </div>
       <div class="page-desc">这张表用来看“今天和最近一段时间”哪些基金最热、加仓还是减仓更强，适合做日常盯盘。</div>
       <div class="tabs">

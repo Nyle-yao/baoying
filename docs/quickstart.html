@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>新手导航（运营上手指南）</title>
+  <style>
+    :root { --bg:#f6f8fb; --card:#ffffff; --text:#1f2937; --muted:#64748b; --line:#e5e7eb; --accent:#111827; --ok:#166534; --warn:#92400e; }
+    body { margin:0; font-family:"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:1080px; margin:0 auto; padding:16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+    .jump-links { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 10px; }
+    .jump-links a { text-decoration:none; border:1px solid #cbd5e1; background:#fff; color:#1f2937; border-radius:8px; padding:6px 10px; font-size:13px; }
+    .jump-links a.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+    h1,h2 { margin:0 0 10px; }
+    h2 { font-size:18px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .box { border:1px solid var(--line); border-radius:10px; padding:10px; background:#fff; }
+    .tag { display:inline-block; border-radius:999px; padding:2px 8px; font-size:12px; margin-right:6px; }
+    .ok { background:#dcfce7; color:var(--ok); }
+    .warn { background:#ffedd5; color:var(--warn); }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { border-bottom:1px solid var(--line); text-align:left; padding:8px; vertical-align:top; }
+    th { background:#f8fafc; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="font-size:24px;">新手导航（运营上手指南）</h1>
+      <div class="muted">适用对象：宝盈基金互联网运营同事。目标：快速识别同业风向、发现机会和风险，并形成日常动作。</div>
+      <div class="jump-links">
+        <a href="./index.html">核心看板</a>
+        <a href="./fund-detail-cockpit.html">基金详情驾驶舱</a>
+        <a href="./ops-metrics.html">动态指标看板</a>
+        <a href="./competitor-weakness.html">竞品弱点看板</a>
+        <a href="./metrics-doc.html">指标文档</a>
+        <a class="on" href="./quickstart.html">新手导航</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>1. 先看哪一张表</h2>
+      <div class="grid">
+        <div class="box">
+          <div><span class="tag ok">日常必看</span>核心看板</div>
+          <div class="muted">看加仓/减仓/双边/当日排序，快速锁定“今天和最近一段时间”的热基金。</div>
+        </div>
+        <div class="box">
+          <div><span class="tag ok">进阶判断</span>基金详情驾驶舱</div>
+          <div class="muted">看浏览-自选-持有链路、投资方向、互动质量，判断热度是否可转化。</div>
+        </div>
+        <div class="box">
+          <div><span class="tag warn">汇报摘要</span>动态指标看板</div>
+          <div class="muted">把关键指标合并成可汇报的一页，适合周会复盘。</div>
+        </div>
+        <div class="box">
+          <div><span class="tag warn">对手扫描</span>竞品弱点看板</div>
+          <div class="muted">发现“热度高但稳定性差”的竞品，用于差异化运营动作。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. 三步法（每天 5 分钟）</h2>
+      <table>
+        <thead>
+          <tr><th>步骤</th><th>怎么做</th><th>你会得到什么</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Step 1</td>
+            <td>进核心看板，先选日期，再看加仓榜和减仓榜前20名。</td>
+            <td>今天谁在被持续关注，风向偏加还是偏减。</td>
+          </tr>
+          <tr>
+            <td>Step 2</td>
+            <td>切到双边表，筛“近7日/近2周/近1月上榜次数”高的基金。</td>
+            <td>识别“反复被讨论、分歧大”的高波动标的。</td>
+          </tr>
+          <tr>
+            <td>Step 3</td>
+            <td>到驾驶舱核对投资方向、笔记互动、跟踪质量，再决定是否重点跟进。</td>
+            <td>把热度筛选转成运营动作（内容、投放、预警）。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>3. 常见疑问</h2>
+      <table>
+        <thead>
+          <tr><th>问题</th><th>解释</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>为什么“投资方向”有时为空？</td>
+            <td>优先取基金详情标签；若详情缺失，系统会兜底到基金类型/基金范围，仍无则显示“未知”。</td>
+          </tr>
+          <tr>
+            <td>日期为什么和网页实时榜单有时不完全一致？</td>
+            <td>源站在 11:00、14:00、15:00、16:00、21:00 分时更新；看板显示会附带“源数据更新时间”用于对照。</td>
+          </tr>
+          <tr>
+            <td>交易日 16:30 前看当天数据怎么解释？</td>
+            <td>若当天尚未完成抓取，会提示“当日未更新爬取”，滚动榜单默认使用已抓取到的最新日期。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

@@ -36,6 +36,7 @@ def main() -> int:
     ops_html = OUT / "运营指标执行看板_动态版.html"
     comp_html = OUT / "竞品弱点雷达附表.html"
     cockpit_html = OUT / "基金详情运营驾驶舱_20260413.html"
+    quickstart_html = OUT / "看板_新手导航.html"
 
     cmd = [
         "python3", str(BASE / "update_daily_append_and_dashboard.py"),
@@ -91,6 +92,10 @@ def main() -> int:
         "python3", str(BASE / "build_fund_detail_ops_dashboard.py"),
         "--input", str(detail_xlsx),
         "--output", str(cockpit_html),
+    ])
+    run([
+        "python3", str(BASE / "build_quickstart_guide.py"),
+        "--output", str(quickstart_html),
     ])
     docs_dir = BASE / "docs"
     run([
