@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
   schedule:
     - cron: "30 2 * * 1-5" # Asia/Shanghai 10:30, Mon-Fri
-    - cron: "30 8 * * 1-5" # Asia/Shanghai 16:30, Mon-Fri
+    - cron: "20 8 * * 1-5" # Asia/Shanghai 16:20, Mon-Fri
 
 permissions:
   contents: write
