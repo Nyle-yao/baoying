@@ -367,8 +367,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       if (mode === "daily") tabDaily.classList.add("on");
       // All tabs: single date selector only.
       dailyBoardSel.style.display = mode === "daily" ? "" : "none";
-      typeSel.style.display = mode === "daily" ? "none" : "";
-      fundTypeSel.style.display = mode === "daily" ? "none" : "";
+      typeSel.style.display = "";
+      fundTypeSel.style.display = "";
       qInput.style.display = mode === "daily" ? "none" : "";
       dateNote.textContent = mode === "daily" ? "当日排序" : "这是滚动排序，看当天请去“当日排序表”。";
       refreshStatusNote();
@@ -430,14 +430,15 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       // Daily ranking tab: show only selected date ranking (not rolling windows).
       if (mode === "daily") {{
         const board = dailyBoardSel.value || "加仓";
-        const dailyScope = "全部基金";
+        const dailyScope = selectedType || "全部基金";
         const rows = DATA
-          .filter(r => r.board === board && applyCommonFilter(r, exactDate, dailyScope, "", ""))
+          .filter(r => r.board === board && applyCommonFilter(r, exactDate, dailyScope, selectedFundType, ""))
           .map(r => ({{
             fund_name: r.fund_name,
             fund_code: r.fund_code,
             invest_direction: r.invest_direction || "",
             type: r.type,
+            fund_category: r.fund_category || "",
             m7: null,
             m14: null,
             m30: null,
@@ -525,14 +526,14 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       const rows = buildRows();
       const qtxt = (qInput.value || "").trim();
       scopeNote.textContent = mode === "daily"
-        ? `当前口径：当日排序；日期=${{dateSel.value || META.latest_date}}；榜单=${{dailyBoardSel.value || "加仓榜"}}；范围=全部基金`
+        ? `当前口径：当日排序；日期=${{dateSel.value || META.latest_date}}；榜单=${{dailyBoardSel.value || "加仓榜"}}；范围=${{typeSel.value || "全部基金"}}；基金类型=${{fundTypeSel.value || "全部"}}`
         : `当前口径：滚动统计；日期=${{dateSel.value || META.latest_date}}；范围=${{typeSel.value || "全部基金"}}；基金类型=${{fundTypeSel.value || "全部"}}；检索=${{qtxt || "无"}}`;
       if (mode === "daily") {{
         thead.innerHTML = `<tr>
           <th>基金名称</th>
           <th>基金代码</th>
           <th>投资方向</th>
-          <th>类型</th>
+          <th>基金类型</th>
           <th>当日排序</th>
         </tr>`;
       }} else {{
@@ -568,7 +569,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
             <td>${{r.fund_name||""}}</td>
             <td>${{r.fund_code||""}}</td>
             <td>${{r.invest_direction||""}}</td>
-            <td>${{r.type||""}}</td>
+            <td>${{r.fund_category||""}}</td>
             <td>${{r.rank==null?"":Number(r.rank)}}</td>
           </tr>
         `).join("");
