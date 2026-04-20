@@ -56,7 +56,7 @@ jobs:
 
           now = datetime.now(timezone.utc)
           # This watchdog cron only runs at UTC 02:40 (10:40 CST) or
-          # 08:30 (16:30 CST) on trading weekdays.
+          # 08:40 (16:40 CST) on trading weekdays.
           slot_hour = 2 if now.hour < 6 else 8
           if slot_hour == 2:
               slot_start = now.replace(hour=slot_hour, minute=25, second=0, microsecond=0)
