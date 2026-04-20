@@ -7,6 +7,7 @@ import argparse
 import json
 import ssl
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -431,7 +432,7 @@ def main() -> int:
 
     subprocess.run(
         [
-            "python3",
+            sys.executable,
             str(BASE_DIR / "build_core_dashboard_from_split.py"),
             "--input",
             str(workbook),
