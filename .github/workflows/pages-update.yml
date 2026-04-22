@@ -56,6 +56,7 @@ jobs:
           python notify_update_status.py --event start
 
       - name: Run full update pipeline
+        if: ${{ github.event_name != 'push' }}
         env:
           TZ: Asia/Shanghai
           CD_NAMESPACE_NAME: ${{ secrets.CD_NAMESPACE_NAME }}
@@ -73,6 +74,11 @@ jobs:
             --target "${CD_TARGET:-https://www.cdollar.cn/leshu-pro/#/e/vq6aKqp5YU}" \
             --browser-id "${CD_BROWSER_ID:-09cb220223cb45410e11e84679b83fb6}"
 
+      - name: Rebuild static pages for push deploy
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          python qa_guard_repair.py --mode rebuild
+
       - name: Post-update QA gate
         run: |
           python qa_guard_repair.py --mode post
@@ -85,6 +91,7 @@ jobs:
           echo "LATEST_DATE=${LATEST_DATE}" >> "$GITHUB_ENV"
 
       - name: Commit updated data and dashboards
+        if: ${{ github.event_name != 'push' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -92,6 +99,7 @@ jobs:
             *.py .github/workflows/pages-update.yml requirements-pages.txt || true
           if ! git diff --cached --quiet; then
             git commit -m "chore: auto-update dashboards"
+            git pull --rebase origin main
             git push
           else
             echo "No changes to commit"
