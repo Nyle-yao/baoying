@@ -179,7 +179,7 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
     payload = json.dumps(rows, ensure_ascii=False)
     notes_payload = json.dumps(notes_rows, ensure_ascii=False, default=str)
     meta_payload = json.dumps(meta, ensure_ascii=False)
-    return f"""<!doctype html>
+    html = """<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -238,6 +238,7 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
       <a href="/competitor-weakness">竞品弱点看板</a>
       <a href="/metrics-doc">指标文档</a>
       <a href="/quickstart">新手导航</a>
+      <a href="/xhs-crawler" onclick="if(location.protocol==='file:'){this.href='./看板_小红书任务控制台.html'}">小红书任务</a>
     </div>
     <div class="filters">
       <select id="direction"></select>
@@ -342,9 +343,9 @@ def build_html(rows: list[dict[str, Any]], notes_rows: list[dict[str, Any]], met
 </div>
 
 <script>
-const DATA = {payload};
-const NOTES = {notes_payload};
-const META = {meta_payload};
+const DATA = __PAYLOAD__;
+const NOTES = __NOTES_PAYLOAD__;
+const META = __META__;
 const fmt = x => Number.isFinite(Number(x)) ? Number(x).toFixed(2) : "";
 const n = x => Number.isFinite(Number(x)) ? Number(x) : 0;
 const byId = id => document.getElementById(id);
@@ -538,6 +539,10 @@ render();
 </script>
 </body>
 </html>"""
+    return (html.replace("{{", "{").replace("}}", "}")
+        .replace("__PAYLOAD__", payload)
+        .replace("__NOTES_PAYLOAD__", notes_payload)
+        .replace("__META__", meta_payload))
 
 
 def main() -> int:

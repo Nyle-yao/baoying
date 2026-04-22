@@ -1,7 +1,9 @@
 name: Update Dashboards And Deploy Pages
 
 on:
-  workflow_dispatch: {}
+  push:
+    branches: [main]
+  workflow_dispatch:
   schedule:
     - cron: "30 2 * * 1-5" # Asia/Shanghai 10:30, Mon-Fri
     - cron: "20 8 * * 1-5" # Asia/Shanghai 16:20, Mon-Fri
@@ -13,7 +15,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   update-and-deploy:
@@ -37,6 +39,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pages.txt
 
+      - name: Preflight QA guard
+        run: |
+          python qa_guard_repair.py --mode preflight
+
       - name: Notify start (WeChat/Email)
         env:
           WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
@@ -58,15 +64,18 @@ jobs:
           CD_TARGET: ${{ secrets.CD_TARGET }}
           CD_BROWSER_ID: ${{ secrets.CD_BROWSER_ID }}
         run: |
-          EXTRA_ARGS="--skip-detail-crawl --max-funds 120"
-          echo "Using quick update mode for both scheduled and manual runs"
           python run_full_update_pipeline.py \
+            --skip-detail-crawl \
+            --max-funds 120 \
             --namespace-name "${CD_NAMESPACE_NAME}" \
             --user-name "${CD_USER_NAME}" \
             --password "${CD_PASSWORD}" \
             --target "${CD_TARGET:-https://www.cdollar.cn/leshu-pro/#/e/vq6aKqp5YU}" \
-            --browser-id "${CD_BROWSER_ID:-09cb220223cb45410e11e84679b83fb6}" \
-            ${EXTRA_ARGS}
+            --browser-id "${CD_BROWSER_ID:-09cb220223cb45410e11e84679b83fb6}"
+
+      - name: Post-update QA gate
+        run: |
+          python qa_guard_repair.py --mode post
 
       - name: Resolve Latest Date
         id: latest
@@ -74,31 +83,6 @@ jobs:
           LATEST_DATE=$(python -c 'from pathlib import Path; import pandas as pd; wb = Path("exports/addsub/加仓减仓分表版20260312_20260409.xlsx"); raw = pd.read_excel(wb, sheet_name="Raw_Data"); raw["统计日期"] = pd.to_datetime(raw["统计日期"], errors="coerce"); latest = raw["统计日期"].max(); print(latest.strftime("%Y-%m-%d"))')
           echo "latest_date=${LATEST_DATE}" >> "$GITHUB_OUTPUT"
           echo "LATEST_DATE=${LATEST_DATE}" >> "$GITHUB_ENV"
-
-      - name: QA Gate 1 - Validate Pipeline
-        env:
-          CD_NAMESPACE_NAME: ${{ secrets.CD_NAMESPACE_NAME }}
-          CD_USER_NAME: ${{ secrets.CD_USER_NAME }}
-          CD_PASSWORD: ${{ secrets.CD_PASSWORD }}
-          CD_TARGET: ${{ secrets.CD_TARGET }}
-          CD_BROWSER_ID: ${{ secrets.CD_BROWSER_ID }}
-        run: |
-          python qa_validate_pipeline.py \
-            --workbook "exports/addsub/加仓减仓分表版20260312_20260409.xlsx" \
-            --namespace-name "${CD_NAMESPACE_NAME}" \
-            --user-name "${CD_USER_NAME}" \
-            --password "${CD_PASSWORD}" \
-            --target "${CD_TARGET:-https://www.cdollar.cn/leshu-pro/#/e/vq6aKqp5YU}" \
-            --browser-id "${CD_BROWSER_ID:-09cb220223cb45410e11e84679b83fb6}" \
-            --live-date "${LATEST_DATE}"
-
-      - name: QA Gate 2 - Strict End-to-End
-        run: |
-          python qa_strict_end_to_end.py \
-            --workbook "exports/addsub/加仓减仓分表版20260312_20260409.xlsx" \
-            --core-html "docs/index.html" \
-            --ops-html "docs/ops-metrics.html" \
-            --weak-html "docs/competitor-weakness.html"
 
       - name: Commit updated data and dashboards
         run: |

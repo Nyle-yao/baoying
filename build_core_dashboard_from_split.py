@@ -176,7 +176,7 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
 def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     payload = json.dumps(rows, ensure_ascii=False)
     meta_json = json.dumps(meta, ensure_ascii=False)
-    return f"""<!doctype html>
+    html = """<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -222,6 +222,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
         <a href="/competitor-weakness">竞品弱点看板</a>
         <a href="/metrics-doc">指标文档</a>
         <a href="/quickstart">新手导航</a>
+        <a href="/xhs-crawler" onclick="if(location.protocol==='file:'){this.href='./看板_小红书任务控制台.html'}">小红书任务</a>
       </div>
       <div class="page-desc">这张表用来看“今天和最近一段时间”哪些基金最热、加仓还是减仓更强，适合做日常盯盘。</div>
       <div class="tabs">
@@ -279,8 +280,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
   </div>
 
   <script>
-    const DATA = {payload};
-    const META = {meta_json};
+    const DATA = __PAYLOAD__;
+    const META = __META__;
     let mode = "add"; // add | sub | both | daily
     const tabAdd = document.getElementById("tab_add");
     const tabSub = document.getElementById("tab_sub");
@@ -601,6 +602,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
 </body>
 </html>
 """
+    return html.replace("{{", "{").replace("}}", "}").replace("__PAYLOAD__", payload).replace("__META__", meta_json)
 
 
 def main() -> int:

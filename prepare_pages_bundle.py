@@ -20,6 +20,8 @@ ROUTE_MAP = {
     'href="/fund-detail-cockpit.html"': 'href="./fund-detail-cockpit.html"',
     'href="/quickstart"': 'href="./quickstart.html"',
     'href="/quickstart.html"': 'href="./quickstart.html"',
+    'href="/xhs-crawler"': 'href="./xhs-crawler.html"',
+    'href="/xhs-crawler.html"': 'href="./xhs-crawler.html"',
     'href="/v2-pilot"': 'href="./index.html"',
     'href="/v2-pilot.html"': 'href="./index.html"',
 }
@@ -32,6 +34,7 @@ FILES = {
     "fund-detail-cockpit.html": "基金详情运营驾驶舱_20260413.html",
     "metrics-doc.html": "运营指标总览看板_运营版.html",
     "quickstart.html": "看板_新手导航.html",
+    "xhs-crawler.html": "看板_小红书任务控制台.html",
 }
 
 
@@ -56,6 +59,7 @@ def write_route_aliases(doc_root: Path) -> None:
         "metrics-doc": "metrics-doc.html",
         "fund-detail-cockpit": "fund-detail-cockpit.html",
         "quickstart": "quickstart.html",
+        "xhs-crawler": "xhs-crawler.html",
     }
     for d, target in alias_dirs.items():
         route_dir = doc_root / d

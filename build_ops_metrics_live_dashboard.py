@@ -111,7 +111,7 @@ def load_rows(workbook: Path, detail_raw_json: Path) -> tuple[list[dict[str, Any
 def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
     payload = json.dumps(rows, ensure_ascii=False)
     meta_json = json.dumps(meta, ensure_ascii=False)
-    return f"""<!doctype html>
+    html = """<!doctype html>
 <html lang=\"zh-CN\">
 <head>
   <meta charset=\"utf-8\" />
@@ -155,6 +155,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
       <a href=\"/competitor-weakness\">竞品弱点看板</a>
       <a href=\"/metrics-doc\">指标文档</a>
       <a href=\"/quickstart\">新手导航</a>
+      <a href=\"/xhs-crawler\" onclick=\"if(location.protocol==='file:'){this.href='./看板_小红书任务控制台.html'}\">小红书任务</a>
     </div>
     <div class=\"page-desc\">这张表用来看各项运营指标的“当前数值”，你换日期或筛选条件，数值会自动更新。</div>
     <div class=\"tabs\" style=\"margin-top:8px\">
@@ -229,8 +230,8 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
 </div>
 
 <script>
-const DATA = {payload};
-const META = {meta_json};
+const DATA = __PAYLOAD__;
+const META = __META__;
 let mode = 'both';
 const n = v => {{ const x=Number(v); return Number.isFinite(x)?x:0; }};
 const avg = arr => arr.length ? (arr.reduce((s,x)=>s+n(x),0)/arr.length) : 0;
@@ -428,6 +429,7 @@ setMode('both');
 </body>
 </html>
 """
+    return html.replace("{{", "{").replace("}}", "}").replace("__PAYLOAD__", payload).replace("__META__", meta_json)
 
 
 def main() -> int:

@@ -111,18 +111,37 @@ def resolve_snapshot_date(raw_df: pd.DataFrame, given_date: str | None) -> str:
     return pd.Timestamp(max_date).strftime("%Y-%m-%d")
 
 
-def load_funds_from_workbook(workbook: Path, snapshot_date: str, max_funds: int | None) -> pd.DataFrame:
+def load_funds_from_workbook(
+    workbook: Path,
+    snapshot_date: str,
+    max_funds: int | None,
+    fund_pool: str,
+) -> pd.DataFrame:
     raw_df = pd.read_excel(workbook, sheet_name="Raw_Data")
     if "基金代码" not in raw_df.columns:
         raise ValueError("Raw_Data sheet missing 基金代码")
     raw_df["基金代码"] = raw_df["基金代码"].map(normalize_code)
-    raw_df["统计日期"] = pd.to_datetime(raw_df["统计日期"], errors="coerce").dt.strftime("%Y-%m-%d")
-    day_df = raw_df[raw_df["统计日期"] == snapshot_date].copy()
-    if day_df.empty:
-        raise ValueError(f"No data on snapshot date {snapshot_date}")
-    day_df = day_df.sort_values(["榜单类型", "基金范围", "榜单名次"], ascending=[True, True, True])
-    keep_cols = [c for c in ["基金代码", "基金简称", "榜单类型", "基金范围", "榜单名次"] if c in day_df.columns]
-    uniq = day_df[keep_cols].drop_duplicates(subset=["基金代码"], keep="first").reset_index(drop=True)
+    raw_df["统计日期"] = pd.to_datetime(raw_df["统计日期"], errors="coerce")
+
+    if fund_pool == "snapshot":
+        day_df = raw_df[raw_df["统计日期"].dt.strftime("%Y-%m-%d") == snapshot_date].copy()
+        if day_df.empty:
+            raise ValueError(f"No data on snapshot date {snapshot_date}")
+        day_df = day_df.sort_values(["榜单类型", "基金范围", "榜单名次"], ascending=[True, True, True])
+        keep_cols = [c for c in ["基金代码", "基金简称", "榜单类型", "基金范围", "榜单名次"] if c in day_df.columns]
+        uniq = day_df[keep_cols].drop_duplicates(subset=["基金代码"], keep="first").reset_index(drop=True)
+        uniq["抓取日期"] = snapshot_date
+    else:
+        # all_history: use each fund's latest appearance date in Raw_Data.
+        # This increases coverage versus single-day snapshot mode.
+        hist = raw_df.copy()
+        hist = hist.sort_values(["基金代码", "统计日期", "榜单类型", "基金范围", "榜单名次"], ascending=[True, False, True, True, True])
+        keep_cols = [c for c in ["基金代码", "基金简称", "榜单类型", "基金范围", "榜单名次", "统计日期"] if c in hist.columns]
+        uniq = hist[keep_cols].drop_duplicates(subset=["基金代码"], keep="first").reset_index(drop=True)
+        uniq["抓取日期"] = pd.to_datetime(uniq["统计日期"], errors="coerce").dt.strftime("%Y-%m-%d")
+        uniq = uniq.drop(columns=[c for c in ["统计日期"] if c in uniq.columns])
+        uniq = uniq.sort_values(["抓取日期", "榜单类型", "基金范围", "榜单名次"], ascending=[False, True, True, True]).reset_index(drop=True)
+
     if max_funds is not None:
         uniq = uniq.head(max_funds)
     return uniq
@@ -255,6 +274,12 @@ def main() -> int:
     parser.add_argument("--article-max-pages", type=int, default=5)
     parser.add_argument("--max-funds", type=int)
     parser.add_argument("--workers", type=int, default=10)
+    parser.add_argument(
+        "--fund-pool",
+        choices=["snapshot", "all_history"],
+        default="snapshot",
+        help="snapshot=仅抓某一天上榜基金; all_history=抓Raw_Data全历史基金池(按每只基金最近上榜日期取数)",
+    )
     args = parser.parse_args()
 
     workbook = Path(args.workbook)
@@ -263,7 +288,12 @@ def main() -> int:
 
     raw_df = pd.read_excel(workbook, sheet_name="Raw_Data")
     snapshot_date = resolve_snapshot_date(raw_df, args.date)
-    funds_df = load_funds_from_workbook(workbook, snapshot_date=snapshot_date, max_funds=args.max_funds)
+    funds_df = load_funds_from_workbook(
+        workbook,
+        snapshot_date=snapshot_date,
+        max_funds=args.max_funds,
+        fund_pool=args.fund_pool,
+    )
 
     token = login(args.namespace_name, args.user_name, args.password, args.target, args.browser_id)
     summaries: list[dict[str, Any]] = []
@@ -279,10 +309,11 @@ def main() -> int:
         fund_code = normalize_code(row.get("基金代码"))
         if not fund_code:
             raise ValueError("empty fund code")
+        crawl_date = str(row.get("抓取日期") or snapshot_date)
         summary, rel_articles, rel_indicators, raw_resp = crawl_one_fund(
             token=token,
             fund_code=fund_code,
-            snapshot_date=snapshot_date,
+            snapshot_date=crawl_date,
             channel=args.channel,
             page_size=args.article_page_size,
             max_pages=args.article_max_pages,
@@ -305,7 +336,7 @@ def main() -> int:
                 indicators.extend(rel_indicators)
                 raw_json_rows.append(
                     {
-                        "snapshotDate": snapshot_date,
+                        "snapshotDate": summary.get("snapshotDate"),
                         "fundCode": fund_code,
                         "fundName": summary.get("fundName"),
                         "responses": raw_resp,
@@ -489,7 +520,10 @@ def main() -> int:
         raw_json_path.parent.mkdir(parents=True, exist_ok=True)
         raw_json_path.write_text(json.dumps(raw_json_rows, ensure_ascii=False), encoding="utf-8")
 
-    print(f"done snapshotDate={snapshot_date} funds={len(summary_df)} articles={len(article_df)} indicators={len(indicator_df)}")
+    print(
+        f"done snapshotDate={snapshot_date} fundPool={args.fund_pool} "
+        f"funds={len(summary_df)} articles={len(article_df)} indicators={len(indicator_df)}"
+    )
     print(f"xlsx={output}")
     if args.raw_json_output:
         print(f"raw_json={args.raw_json_output}")

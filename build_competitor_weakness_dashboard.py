@@ -171,6 +171,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, Any]) -> str:
       <a class=\"on\" href=\"/competitor-weakness\">竞品弱点看板</a>
       <a href=\"/metrics-doc\">指标文档</a>
       <a href=\"/quickstart\">新手导航</a>
+      <a href=\"/xhs-crawler\" onclick=\"if(location.protocol==='file:'){this.href='./看板_小红书任务控制台.html'}\">小红书任务</a>
     </div>
     <div class=\"page-desc\">这张表用来找“对手基金哪里在变弱”，方便你挑出最值得优先突破的目标。</div>
     <div class=\"tabs\">

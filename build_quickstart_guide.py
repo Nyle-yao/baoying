@@ -85,6 +85,7 @@ def build_html(meta: dict[str, str]) -> str:
         <a href="/competitor-weakness">竞品弱点看板</a>
         <a href="/metrics-doc">指标文档</a>
         <a class="on" href="/quickstart">新手导航</a>
+        <a href="/xhs-crawler" onclick="if(location.protocol==='file:'){this.href='./看板_小红书任务控制台.html'}">小红书任务</a>
       </div>
     </div>
 

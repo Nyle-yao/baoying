@@ -42,6 +42,7 @@ def main() -> int:
     comp_html = OUT / "竞品弱点雷达附表.html"
     cockpit_html = OUT / "基金详情运营驾驶舱_20260413.html"
     quickstart_html = OUT / "看板_新手导航.html"
+    xhs_html = OUT / "看板_小红书任务控制台.html"
 
     cmd = [
         "python3", str(BASE / "update_daily_append_and_dashboard.py"),
@@ -107,6 +108,9 @@ def main() -> int:
     run([
         "python3", str(BASE / "build_quickstart_guide.py"),
         "--output", str(quickstart_html),
+    ])
+    run([
+        "python3", str(BASE / "build_xhs_crawler_dashboard.py"),
     ])
     docs_dir = BASE / "docs"
     run([

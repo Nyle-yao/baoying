@@ -430,6 +430,8 @@ def main() -> int:
     new_df = build_new_rows(token, day, args.show_by, company_map)
     append_and_save(workbook, new_df)
 
+    # Use the same Python interpreter as current process to avoid cron env drift
+    # (e.g. inner call switching to a python without pandas/openpyxl).
     subprocess.run(
         [
             sys.executable,
