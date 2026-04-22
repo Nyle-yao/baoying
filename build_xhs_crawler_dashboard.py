@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-OUT = Path('/Users/yaoruanxingchen/c/exports/addsub/看板_小红书任务控制台.html')
+BASE = Path(__file__).resolve().parent
+OUT = BASE / 'exports' / 'addsub' / '看板_小红书任务控制台.html'
 
 UPDATED_AT = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -297,5 +298,6 @@ function downloadExcel() {{
 </html>
 '''
 
+OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(html_text, encoding='utf-8')
 print(OUT)
