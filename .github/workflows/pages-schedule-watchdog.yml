@@ -3,8 +3,7 @@ name: Pages Schedule Watchdog
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "40 2 * * 1-5" # Asia/Shanghai 10:40
-    - cron: "40 8 * * 1-5" # Asia/Shanghai 16:40
+    - cron: "50 14 * * *" # Asia/Shanghai 22:50, nightly maintenance watchdog
 
 permissions:
   actions: write
@@ -55,16 +54,10 @@ jobs:
                   return
 
           now = datetime.now(timezone.utc)
-          # This watchdog cron only runs at UTC 02:40 (10:40 CST) or
-          # 08:40 (16:40 CST) on trading weekdays.
-          slot_hour = 2 if now.hour < 6 else 8
-          if slot_hour == 2:
-              slot_start = now.replace(hour=slot_hour, minute=25, second=0, microsecond=0)
-              slot_end = now.replace(hour=slot_hour, minute=59, second=59, microsecond=0)
-          else:
-              # Main PM schedule is 16:20 CST (UTC 08:20), keep a tolerant window.
-              slot_start = now.replace(hour=slot_hour, minute=15, second=0, microsecond=0)
-              slot_end = now.replace(hour=slot_hour, minute=49, second=59, microsecond=0)
+          # This watchdog cron runs at UTC 14:50 (Asia/Shanghai 22:50).
+          # Main nightly maintenance is UTC 14:30 (Asia/Shanghai 22:30).
+          slot_start = now.replace(hour=14, minute=25, second=0, microsecond=0)
+          slot_end = now.replace(hour=14, minute=59, second=59, microsecond=0)
 
           runs_url = (
               f"https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/runs?per_page=50"

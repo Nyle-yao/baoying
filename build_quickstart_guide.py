@@ -9,19 +9,21 @@ from datetime import datetime
 import pandas as pd
 
 
-DEFAULT_WORKBOOK = Path("/Users/yaoruanxingchen/c/exports/addsub/加仓减仓分表版20260312_20260409.xlsx")
-DEFAULT_WORKFLOW = Path("/Users/yaoruanxingchen/c/.github/workflows/pages-update.yml")
+BASE = Path(__file__).resolve().parent
+DEFAULT_WORKBOOK = BASE / "exports" / "addsub" / "加仓减仓分表版20260312_20260409.xlsx"
+DEFAULT_WORKFLOW = BASE / ".github" / "workflows" / "pages-update.yml"
 
 
 def parse_schedule_text(workflow_path: Path) -> str:
     if not workflow_path.exists():
-        return "交易日定时任务：10:30 与 16:30（若未部署则以本地手动更新为准）"
+        return "自动维护时间：每日晚上22:30（若未部署则以本地手动更新为准）"
     txt = workflow_path.read_text(encoding="utf-8", errors="ignore")
     crons = re.findall(r'cron:\s*"([^"]+)"', txt)
-    # expected: 30 2 / 30 8 for Asia/Shanghai
+    if "30 14 * * *" in crons:
+        return "自动维护时间：每日晚上22:30（自动抓取、质检、重建并发布；尽量不打扰白天使用）"
     if "30 2 * * 1-5" in crons and "30 8 * * 1-5" in crons:
-        return "交易日定时任务：10:30 与 16:30（自动抓取+重建看板）"
-    return "交易日定时任务：已配置（请以 workflow 实际 cron 为准）"
+        return "交易日定时任务：10:30 与 16:30（旧口径，建议改为晚间维护）"
+    return "自动维护时间：已配置（请以 workflow 实际 cron 为准）"
 
 
 def collect_auto_meta(workbook: Path, workflow: Path) -> dict[str, str]:
@@ -153,8 +155,8 @@ def build_html(meta: dict[str, str]) -> str:
             <td>源站在 11:00、14:00、15:00、16:00、21:00 分时更新；看板显示会附带“源数据更新时间”用于对照。</td>
           </tr>
           <tr>
-            <td>交易日 16:30 前看当天数据怎么解释？</td>
-            <td>若当天尚未完成抓取，会提示“当日未更新爬取”，滚动榜单默认使用已抓取到的最新日期。</td>
+            <td>白天看当天数据怎么解释？</td>
+            <td>系统默认晚上维护更新。白天优先看已发布稳定版本；若当天尚未完成晚间维护，会提示数据更新至上一有效日期。</td>
           </tr>
           <tr>
             <td>为什么切换日期后有的基金不见了？</td>
@@ -217,7 +219,7 @@ def build_html(meta: dict[str, str]) -> str:
           <tr>
             <td>V1.5：自动更新与发布</td>
             <td>解决手工更新容易漏跑、网页版本与本地版本不一致的问题。</td>
-            <td>交易日自动抓取并重建看板；发布前会跑 QA，检查不通过不应发布。</td>
+            <td>每日晚间自动抓取并重建看板；发布前会跑 QA，检查不通过不应发布，尽量不影响白天同事使用。</td>
           </tr>
           <tr>
             <td>V1.6：全链路质检增强</td>
@@ -246,7 +248,7 @@ def build_html(meta: dict[str, str]) -> str:
       <div class="muted" style="line-height:1.8;">
         看板最核心的使用逻辑是“先定日期，再看数据”，日期切换后展示的是该日期当天抓到的值，不会混入其他日期。<br/>
         如果某只基金在该日期没有上榜，相关字段为空是正常业务含义，不是系统随机丢数。<br/>
-        若和网页实时榜单有差异，先对照“最新统计日期、生成时间、源站分时更新点（11:00/14:00/15:00/16:00/21:00）”，再判断是否是时间点差异。<br/>
+        若和网页实时榜单有差异，先对照“最新统计日期、生成时间、源站分时更新点（11:00/14:00/15:00/16:00/21:00）”，再判断是否是时间点差异；正式发布更新默认安排在晚上，避免白天影响同事使用。<br/>
         当前系统会做全量质检（名次连续、代码格式、跨范围收益一致性、前端数据块一致性），用于保障可用性。<br/>
         日常建议流程：核心看板先筛热点与方向，再到驾驶舱判断可转化性，最后用动态指标看板做汇报总结。
       </div>

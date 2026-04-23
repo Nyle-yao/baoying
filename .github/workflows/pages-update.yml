@@ -5,8 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "30 2 * * 1-5" # Asia/Shanghai 10:30, Mon-Fri
-    - cron: "20 8 * * 1-5" # Asia/Shanghai 16:20, Mon-Fri
+    - cron: "30 14 * * *" # Asia/Shanghai 22:30, nightly maintenance
 
 permissions:
   contents: write
