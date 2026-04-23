@@ -117,6 +117,10 @@ jobs:
         with:
           artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
 
+      - name: Online Pages health check
+        run: |
+          python qa_online_pages_check.py --url "${{ steps.deployment.outputs.page_url }}"
+
       - name: Notify success (WeChat/Email)
         if: ${{ success() }}
         env:

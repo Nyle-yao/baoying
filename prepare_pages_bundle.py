@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 
@@ -60,6 +61,7 @@ def write_route_aliases(doc_root: Path) -> None:
         "fund-detail-cockpit": "fund-detail-cockpit.html",
         "quickstart": "quickstart.html",
         "xhs-crawler": "xhs-crawler.html",
+        "maintenance": "maintenance.html",
     }
     for d, target in alias_dirs.items():
         route_dir = doc_root / d
@@ -68,6 +70,64 @@ def write_route_aliases(doc_root: Path) -> None:
             f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../{target}">',
             encoding="utf-8",
         )
+
+
+def write_maintenance_pages(doc_root: Path) -> None:
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    html = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>看板正在维护</title>
+  <style>
+    body {{
+      margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      font-family:"PingFang SC","Microsoft YaHei",sans-serif; color:#172033;
+      background:linear-gradient(135deg,#f7f1df 0%,#eaf3ff 52%,#f7fbf5 100%);
+    }}
+    .card {{
+      width:min(720px, calc(100vw - 40px)); background:rgba(255,255,255,.88);
+      border:1px solid rgba(148,163,184,.35); border-radius:22px; padding:30px;
+      box-shadow:0 22px 70px rgba(15,23,42,.12);
+    }}
+    h1 {{ margin:0 0 12px; font-size:30px; }}
+    p {{ margin:8px 0; color:#475569; line-height:1.7; font-size:15px; }}
+    .time {{ margin-top:18px; padding:14px; border-radius:14px; background:#f8fafc; border:1px solid #e2e8f0; }}
+    .btns {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }}
+    a {{ text-decoration:none; color:#fff; background:#111827; border-radius:999px; padding:10px 14px; font-size:14px; }}
+    a.secondary {{ color:#111827; background:#fff; border:1px solid #cbd5e1; }}
+    code {{ background:#eef2ff; padding:2px 6px; border-radius:6px; }}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>看板正在维护</h1>
+    <p>当前页面暂时没有正常展示，可能是 GitHub Pages 正在部署、缓存刷新中，或访问了不存在的页面。</p>
+    <p>如果这是核心看板入口，请稍后刷新；如果持续打不开，说明 Pages 设置或本次部署需要检查。</p>
+    <div class="time">
+      <p><strong>页面生成时间：</strong>{generated_at}</p>
+      <p><strong>浏览器当前时间：</strong><span id="now">读取中...</span></p>
+      <p><strong>处理状态：</strong>系统会在 GitHub Actions 中执行数据 QA、页面生成 QA 和线上可访问性自检。</p>
+    </div>
+    <div class="btns">
+      <a href="./index.html">返回核心看板</a>
+      <a class="secondary" href="./quickstart.html">查看新手导航</a>
+      <a class="secondary" href="https://github.com/Nyle-yao/baoying/actions">查看部署进度</a>
+    </div>
+  </main>
+  <script>
+    function tick() {{
+      document.getElementById("now").textContent = new Date().toLocaleString("zh-CN", {{ hour12:false }});
+    }}
+    tick();
+    setInterval(tick, 1000);
+  </script>
+</body>
+</html>
+"""
+    (doc_root / "maintenance.html").write_text(html, encoding="utf-8")
+    (doc_root / "404.html").write_text(html, encoding="utf-8")
 
 
 
@@ -109,6 +169,7 @@ def main() -> int:
         (docs / out_name).write_text(rewrite_html(html, static_mode=static_mode), encoding="utf-8")
 
     write_route_aliases(docs)
+    write_maintenance_pages(docs)
     print(docs)
     return 0
 
