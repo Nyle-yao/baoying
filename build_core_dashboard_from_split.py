@@ -16,6 +16,7 @@ import pandas as pd
 INPUT_XLSX = Path("/Users/yaoruanxingchen/c/exports/addsub/加仓减仓分表版20260312_20260409.xlsx")
 OUTPUT_HTML = Path("/Users/yaoruanxingchen/c/exports/addsub/看板_核心版_20260312_20260409.html")
 DETAIL_RAW_JSON = Path("/Users/yaoruanxingchen/c/exports/addsub/基金详情抓取_20260413_raw.json")
+SOURCE_FRESHNESS_JSON = "source_freshness.json"
 
 
 def norm_code(v: Any) -> str:
@@ -170,6 +171,23 @@ def load_rows(xlsx_path: Path, detail_raw_json: Path) -> tuple[list[dict[str, An
         "crawl_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "source_update_latest": source_update_latest,
     }
+    freshness_path = xlsx_path.parent / SOURCE_FRESHNESS_JSON
+    if freshness_path.exists():
+        try:
+            freshness = json.loads(freshness_path.read_text(encoding="utf-8"))
+            meta.update(
+                {
+                    "source_status": str(freshness.get("status") or ""),
+                    "source_target_date": str(freshness.get("target_date") or ""),
+                    "source_checked_at": str(freshness.get("checked_at") or ""),
+                    "source_latest_available_date": str(freshness.get("latest_available_date") or ""),
+                    "source_latest_update_time": str(freshness.get("latest_source_update_time") or ""),
+                    "source_message": str(freshness.get("message") or ""),
+                }
+            )
+        except Exception as exc:
+            meta["source_status"] = "freshness_parse_failed"
+            meta["source_message"] = f"源头状态文件解析失败：{exc}"
     return rows, meta
 
 
@@ -336,7 +354,7 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     fundTypeSel.innerHTML = '<option value="">全部基金类型</option>' + fundTypes.map(t => `<option value="${{t}}">${{t}}</option>`).join("");
     document.getElementById("meta_latest").textContent = META.latest_date || "-";
     document.getElementById("meta_crawl").textContent = META.crawl_at || "-";
-    document.getElementById("meta_src_upd").textContent = META.source_update_latest || "-";
+    document.getElementById("meta_src_upd").textContent = META.source_latest_update_time || META.source_update_latest || "-";
 
     function todayStrLocal() {{
       const d = new Date();
@@ -348,13 +366,16 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
     function refreshStatusNote() {{
       const latest = META.latest_date || "";
       const today = todayStrLocal();
-      if (latest && latest < today) {{
-        const src = META.source_update_latest || "-";
-        const crawl = META.crawl_at || "-";
+      if ((META.source_status && META.source_status !== "ok_new_rows") || (latest && latest < today)) {{
+        const src = META.source_latest_update_time || META.source_update_latest || "-";
+        const crawl = META.source_checked_at || META.crawl_at || "-";
+        const target = META.source_target_date || today;
+        const available = META.source_latest_available_date || latest || "-";
+        const baseMessage = META.source_message || `源站暂未返回 ${{available}} 之后的榜单数据。`;
         if (mode === "daily") {{
-          statusNote.textContent = `维护提示：源站暂未返回 ${{latest}} 之后的榜单数据，当前当日表展示最新有效数据 ${{latest}}；本次检测时间：${{crawl}}，源数据更新时间：${{src}}。`;
+          statusNote.textContent = `维护提示：${{baseMessage}} 当前当日表展示最新有效数据 ${{latest || available}}；尝试日期：${{target}}；检测时间：${{crawl}}；源数据更新时间：${{src}}。`;
         }} else {{
-          statusNote.textContent = `维护提示：源站暂未返回 ${{latest}} 之后的榜单数据，当前滚动统计基于最新有效数据 ${{latest}}；本次检测时间：${{crawl}}，源数据更新时间：${{src}}。`;
+          statusNote.textContent = `维护提示：${{baseMessage}} 当前滚动统计基于最新有效数据 ${{latest || available}}；尝试日期：${{target}}；检测时间：${{crawl}}；源数据更新时间：${{src}}。`;
         }}
       }} else {{
         statusNote.textContent = "";

@@ -13,7 +13,13 @@ OUT = BASE / "exports" / "addsub"
 
 
 def run(cmd: list[str]) -> None:
-    print("$", " ".join(cmd))
+    safe_cmd = cmd[:]
+    for key in ["--password"]:
+        if key in safe_cmd:
+            idx = safe_cmd.index(key)
+            if idx + 1 < len(safe_cmd):
+                safe_cmd[idx + 1] = "***"
+    print("$", " ".join(safe_cmd))
     subprocess.run(cmd, check=True)
 
 

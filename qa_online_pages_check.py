@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 import urllib.error
@@ -54,6 +55,15 @@ def main() -> int:
     url = args.url.rstrip("/") + "/"
     latest_date = latest_date_from_workbook(args.workbook)
     expected_markers = ["核心看板", latest_date]
+    freshness = Path("exports/addsub/source_freshness.json")
+    if freshness.exists():
+        try:
+            status_payload = json.loads(freshness.read_text(encoding="utf-8"))
+            msg = str(status_payload.get("message") or "")
+            if msg:
+                expected_markers.append(msg[:20])
+        except Exception:
+            pass
 
     last_status = None
     last_excerpt = ""
@@ -67,6 +77,15 @@ def main() -> int:
             f"url={url} status={status} latest_date={latest_date} marker_ok={marker_ok}"
         )
         if status == 200 and marker_ok:
+            if freshness.exists():
+                json_status, json_body = fetch(url + "source_freshness.json", args.timeout)
+                if json_status != 200:
+                    print(f"[online-check] source_freshness.json unavailable status={json_status}")
+                    if attempt < args.attempts:
+                        time.sleep(args.sleep)
+                        continue
+                    break
+                print(f"[online-check] source_freshness.json reachable bytes={len(json_body)}")
             print("[online-check] PASS GitHub Pages is reachable and current")
             return 0
         if attempt < args.attempts:

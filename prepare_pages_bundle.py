@@ -168,6 +168,18 @@ def main() -> int:
         static_mode = out_name == "index.html"
         (docs / out_name).write_text(rewrite_html(html, static_mode=static_mode), encoding="utf-8")
 
+    # Keep the source freshness probe visible on Pages for audit/debugging.
+    freshness = src / "source_freshness.json"
+    if freshness.exists():
+        (docs / "source_freshness.json").write_text(
+            freshness.read_text(encoding="utf-8", errors="replace"),
+            encoding="utf-8",
+        )
+    # Historical link compatibility.
+    quickstart = docs / "quickstart.html"
+    if quickstart.exists():
+        (docs / "quick-start.html").write_text(quickstart.read_text(encoding="utf-8"), encoding="utf-8")
+
     write_route_aliases(docs)
     write_maintenance_pages(docs)
     print(docs)

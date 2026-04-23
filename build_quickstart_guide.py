@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 from datetime import datetime
@@ -32,6 +33,7 @@ def collect_auto_meta(workbook: Path, workflow: Path) -> dict[str, str]:
         "latest_rows": "-",
         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "schedule_text": parse_schedule_text(workflow),
+        "source_status_text": "源头状态：暂无额外检测信息",
     }
     if not workbook.exists():
         return out
@@ -44,6 +46,17 @@ def collect_auto_meta(workbook: Path, workflow: Path) -> dict[str, str]:
         out["latest_rows"] = str(len(latest_rows)) if pd.notna(latest) else "-"
     except Exception:
         pass
+    freshness_path = workbook.parent / "source_freshness.json"
+    if freshness_path.exists():
+        try:
+            freshness = json.loads(freshness_path.read_text(encoding="utf-8"))
+            out["source_status_text"] = (
+                f"源头状态：{freshness.get('message') or '-'} "
+                f"尝试日期 {freshness.get('target_date') or '-'}；"
+                f"检测时间 {freshness.get('checked_at') or '-'}。"
+            )
+        except Exception:
+            out["source_status_text"] = "源头状态：检测文件存在但解析失败"
     return out
 
 
@@ -190,6 +203,7 @@ def build_html(meta: dict[str, str]) -> str:
       <h2>4. 历史迭代与修复说明</h2>
       <div class="muted" style="margin-bottom:8px;">自动补充：最新统计日期 __LATEST_DATE__；该日行数 __LATEST_ROWS__；生成时间 __UPDATED_AT__。</div>
       <div class="muted" style="margin-bottom:8px;">自动补充：__SCHEDULE_TEXT__</div>
+      <div class="muted" style="margin-bottom:8px;">自动补充：__SOURCE_STATUS_TEXT__</div>
       <table>
         <thead>
           <tr><th>版本/阶段</th><th>解决的问题</th><th>现在的使用口径</th></tr>
@@ -240,6 +254,11 @@ def build_html(meta: dict[str, str]) -> str:
             <td>避免“本地看板正确、网页看板没更新”或“网页数据被旧工作簿覆盖”的问题。</td>
             <td>上线后会直接抓取线上页面做复核，确认线上数据日期、行数、历史分组和筛选逻辑都已生效。</td>
           </tr>
+          <tr>
+            <td>V1.9：源头停更识别</td>
+            <td>解决源站接口返回空数据或把旧数据兜底返回时，系统可能误判为更新成功的问题。</td>
+            <td>系统会同时检测接口返回行数和数据更新时间；如果源站只返回旧快照，不会写入为新日期，并会在核心看板提示“源站暂未返回新数据”。</td>
+          </tr>
         </tbody>
       </table>
       <div class="muted" style="margin-top:8px;">
@@ -265,6 +284,7 @@ def build_html(meta: dict[str, str]) -> str:
     html = html.replace("__LATEST_ROWS__", meta.get("latest_rows", "-"))
     html = html.replace("__UPDATED_AT__", meta.get("updated_at", "-"))
     html = html.replace("__SCHEDULE_TEXT__", meta.get("schedule_text", "-"))
+    html = html.replace("__SOURCE_STATUS_TEXT__", meta.get("source_status_text", "-"))
     return html
 
 

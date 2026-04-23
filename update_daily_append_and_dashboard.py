@@ -11,7 +11,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ DEFAULT_BROWSER_ID = "09cb220223cb45410e11e84679b83fb6"
 
 RANKING_KIND_LABEL = {"add": "加仓榜", "sub": "减仓榜"}
 FUND_SCOPE_LABEL = {"all": "全部基金", "stock": "偏股基金", "bond": "偏债基金", "qd": "QD基金"}
+SOURCE_FRESHNESS_FILE = "source_freshness.json"
 
 
 def post_json(url: str, payload: dict[str, Any], headers: dict[str, str], retries: int = 3) -> dict[str, Any]:
@@ -178,13 +179,44 @@ def repair_cross_scope_metric_outliers(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def fetch_one_combo_once(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
+def extract_update_times(rows: list[dict[str, Any]]) -> list[datetime]:
+    out: list[datetime] = []
+    for row in rows:
+        raw = str(row.get("updateTime") or "").strip()
+        if not raw:
+            continue
+        try:
+            out.append(datetime.strptime(raw[:19], "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            continue
+    return out
+
+
+def rows_match_requested_date(rows: list[dict[str, Any]], date_str: str) -> bool:
+    """Reject upstream fallback rows whose updateTime belongs to an older date."""
+    if not rows:
+        return False
+    update_times = extract_update_times(rows)
+    if not update_times:
+        # Old source versions may not expose updateTime. Accept non-empty direct data.
+        return True
+    return max(x.date() for x in update_times).strftime("%Y-%m-%d") == date_str
+
+
+def fetch_one_combo_once(
+    token: str,
+    date_str: str,
+    ranking_kind: str,
+    fund_scope: str,
+    show_by: int,
+    date_field: str = "date",
+) -> list[dict[str, Any]]:
     type_name = f"{RANKING_KIND_LABEL[ranking_kind]}-{FUND_SCOPE_LABEL[fund_scope]}"
     page_no = 1
     rows: list[dict[str, Any]] = []
     while True:
         payload = {
-            "date": date_str,
+            date_field: date_str,
             "showBy": show_by,
             "type": type_name,
             "pageNo": page_no,
@@ -201,6 +233,33 @@ def fetch_one_combo_once(token: str, date_str: str, ranking_kind: str, fund_scop
     return rows
 
 
+def fetch_one_combo_candidate(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
+    """Fetch current source rows while avoiding stale dateStr fallback data.
+
+    The Leshu frontend currently posts `date`, but the source also accepts `dateStr`.
+    When the source has no rows for a day, `dateStr` may return the latest old snapshot
+    (for example 2026-04-20 rows for 2026-04-23). We only accept fallback rows when
+    their own updateTime matches the requested date.
+    """
+    direct_rows = fetch_one_combo_once(token, date_str, ranking_kind, fund_scope, show_by, date_field="date")
+    if rows_match_requested_date(direct_rows, date_str):
+        return direct_rows
+    if direct_rows:
+        print(f"warn_reject_stale_date_rows {date_str} {ranking_kind}-{fund_scope}")
+
+    fallback_rows = fetch_one_combo_once(token, date_str, ranking_kind, fund_scope, show_by, date_field="dateStr")
+    if rows_match_requested_date(fallback_rows, date_str):
+        print(f"info_accept_dateStr_rows {date_str} {ranking_kind}-{fund_scope}")
+        return fallback_rows
+    if fallback_rows:
+        updates = sorted({str(r.get("updateTime") or "") for r in fallback_rows if r.get("updateTime")})
+        print(
+            f"warn_reject_stale_dateStr_rows {date_str} {ranking_kind}-{fund_scope} "
+            f"updates={updates[:3]}"
+        )
+    return []
+
+
 def combo_signature(rows: list[dict[str, Any]]) -> tuple[str, ...]:
     sig: list[str] = []
     for r in rows:
@@ -211,11 +270,13 @@ def combo_signature(rows: list[dict[str, Any]]) -> tuple[str, ...]:
 def fetch_one_combo(token: str, date_str: str, ranking_kind: str, fund_scope: str, show_by: int) -> list[dict[str, Any]]:
     """Fetch with stability guard: sample multiple snapshots and choose the majority signature."""
     samples: list[tuple[tuple[str, ...], list[dict[str, Any]]]] = []
-    for attempt in range(1, 6):
-        rows = fetch_one_combo_once(token, date_str, ranking_kind, fund_scope, show_by)
+    # Two samples are enough for the nightly update guard. Older 5-sample logic was
+    # too slow when the upstream source was stale or timing out.
+    for attempt in range(1, 3):
+        rows = fetch_one_combo_candidate(token, date_str, ranking_kind, fund_scope, show_by)
         sig = combo_signature(rows)
         samples.append((sig, rows))
-        if attempt < 5:
+        if attempt < 2:
             time.sleep(1)
 
     freq: dict[tuple[str, ...], int] = {}
@@ -261,6 +322,72 @@ def build_new_rows(token: str, day: date, show_by: int, company_map: dict[str, s
                     }
                 )
     return pd.DataFrame(out)
+
+
+def build_source_freshness_status(token: str, day: date, show_by: int, new_df: pd.DataFrame, probe_days: int = 10) -> dict[str, Any]:
+    checked: list[dict[str, Any]] = []
+    latest_available_date = ""
+    latest_source_update_time = ""
+
+    for offset in range(probe_days):
+        d = day - timedelta(days=offset)
+        ds = d.strftime("%Y-%m-%d")
+        if d.weekday() >= 5:
+            continue
+        direct_rows = fetch_one_combo_once(token, ds, "add", "all", show_by, date_field="date")
+        fallback_rows = fetch_one_combo_once(token, ds, "add", "all", show_by, date_field="dateStr")
+        direct_updates = extract_update_times(direct_rows)
+        fallback_updates = extract_update_times(fallback_rows)
+        all_updates = direct_updates + fallback_updates
+        update_latest = max(all_updates).strftime("%Y-%m-%d %H:%M:%S") if all_updates else ""
+        direct_fresh = rows_match_requested_date(direct_rows, ds)
+        fallback_fresh = rows_match_requested_date(fallback_rows, ds)
+        checked.append(
+            {
+                "date": ds,
+                "date_rows": len(direct_rows),
+                "date_fresh": direct_fresh,
+                "dateStr_rows": len(fallback_rows),
+                "dateStr_fresh": fallback_fresh,
+                "latest_update_time": update_latest,
+            }
+        )
+        if all_updates:
+            upd = max(all_updates)
+            if not latest_source_update_time or upd.strftime("%Y-%m-%d %H:%M:%S") > latest_source_update_time:
+                latest_source_update_time = upd.strftime("%Y-%m-%d %H:%M:%S")
+                latest_available_date = upd.strftime("%Y-%m-%d")
+
+    target_rows = 0 if new_df is None or new_df.empty else int(len(new_df))
+    if target_rows > 0:
+        status = "ok_new_rows"
+        message = f"源站已返回 {day:%Y-%m-%d} 榜单数据，本次新增/替换 {target_rows} 行。"
+    elif latest_available_date:
+        status = "source_no_new_rows"
+        message = (
+            f"源站暂未返回 {day:%Y-%m-%d} 的有效榜单数据；"
+            f"接口最新有效数据更新时间为 {latest_source_update_time}。"
+        )
+    else:
+        status = "source_empty"
+        message = f"源站近 {probe_days} 个自然日未返回可识别的榜单数据。"
+
+    return {
+        "target_date": day.strftime("%Y-%m-%d"),
+        "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": status,
+        "target_rows": target_rows,
+        "latest_available_date": latest_available_date,
+        "latest_source_update_time": latest_source_update_time,
+        "message": message,
+        "checked_dates": checked,
+    }
+
+
+def write_source_freshness(workbook: Path, status: dict[str, Any]) -> None:
+    path = workbook.parent / SOURCE_FRESHNESS_FILE
+    path.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"source_freshness {path} status={status.get('status')} latest={status.get('latest_available_date')}")
 
 
 def recompute_derived_days(df: pd.DataFrame) -> pd.DataFrame:
@@ -428,6 +555,8 @@ def main() -> int:
     token = login(args.namespace_name, args.user_name, args.password, args.target, args.browser_id)
     company_map = fetch_company_map(token)
     new_df = build_new_rows(token, day, args.show_by, company_map)
+    freshness = build_source_freshness_status(token, day, args.show_by, new_df)
+    write_source_freshness(workbook, freshness)
     append_and_save(workbook, new_df)
 
     # Use the same Python interpreter as current process to avoid cron env drift
