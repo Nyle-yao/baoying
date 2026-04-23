@@ -349,10 +349,12 @@ def build_html(rows: list[dict[str, Any]], meta: dict[str, str]) -> str:
       const latest = META.latest_date || "";
       const today = todayStrLocal();
       if (latest && latest < today) {{
+        const src = META.source_update_latest || "-";
+        const crawl = META.crawl_at || "-";
         if (mode === "daily") {{
-          statusNote.textContent = `当日未更新爬取，每天四点半前爬（当前更新至${{latest}}）`;
+          statusNote.textContent = `维护提示：源站暂未返回 ${{latest}} 之后的榜单数据，当前当日表展示最新有效数据 ${{latest}}；本次检测时间：${{crawl}}，源数据更新时间：${{src}}。`;
         }} else {{
-          statusNote.textContent = `数据爬取更新至前一日（${{latest}}）`;
+          statusNote.textContent = `维护提示：源站暂未返回 ${{latest}} 之后的榜单数据，当前滚动统计基于最新有效数据 ${{latest}}；本次检测时间：${{crawl}}，源数据更新时间：${{src}}。`;
         }}
       }} else {{
         statusNote.textContent = "";
