@@ -1,12 +1,28 @@
 {
-  "target_date": "2026-05-15",
-  "checked_at": "2026-05-15 00:54:02",
+  "target_date": "2026-05-19",
+  "checked_at": "2026-05-19 01:18:29",
   "status": "source_no_new_rows",
   "target_rows": 0,
   "latest_available_date": "2026-04-20",
   "latest_source_update_time": "2026-04-20 21:00:08",
-  "message": "源站暂未返回 2026-05-15 的有效榜单数据；接口最新有效数据更新时间为 2026-04-20 21:00:08。",
+  "message": "源站暂未返回 2026-05-19 的有效榜单数据；接口最新有效数据更新时间为 2026-04-20 21:00:08。",
   "checked_dates": [
+    {
+      "date": "2026-05-19",
+      "date_rows": 0,
+      "date_fresh": false,
+      "dateStr_rows": 30,
+      "dateStr_fresh": false,
+      "latest_update_time": "2026-04-20 21:00:08"
+    },
+    {
+      "date": "2026-05-18",
+      "date_rows": 0,
+      "date_fresh": false,
+      "dateStr_rows": 30,
+      "dateStr_fresh": false,
+      "latest_update_time": "2026-04-20 21:00:08"
+    },
     {
       "date": "2026-05-15",
       "date_rows": 0,
@@ -41,30 +57,6 @@
     },
     {
       "date": "2026-05-11",
-      "date_rows": 0,
-      "date_fresh": false,
-      "dateStr_rows": 30,
-      "dateStr_fresh": false,
-      "latest_update_time": "2026-04-20 21:00:08"
-    },
-    {
-      "date": "2026-05-08",
-      "date_rows": 0,
-      "date_fresh": false,
-      "dateStr_rows": 30,
-      "dateStr_fresh": false,
-      "latest_update_time": "2026-04-20 21:00:08"
-    },
-    {
-      "date": "2026-05-07",
-      "date_rows": 0,
-      "date_fresh": false,
-      "dateStr_rows": 30,
-      "dateStr_fresh": false,
-      "latest_update_time": "2026-04-20 21:00:08"
-    },
-    {
-      "date": "2026-05-06",
       "date_rows": 0,
       "date_fresh": false,
       "dateStr_rows": 30,
